@@ -1,0 +1,26 @@
+{
+  "name": "aeion-spec-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/flue",
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "dev:server": "bun --watch packages/server/src/index.ts",
+    "dev:web": "bun --cwd packages/web dev",
+    "build:web": "bun --cwd packages/web build",
+    "typecheck": "bun --cwd packages/shared tsc --noEmit && bun --cwd packages/flue tsc --noEmit && bun --cwd packages/server tsc --noEmit && bun --cwd packages/web tsc --noEmit",
+    "test": "bun test packages/server/test"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.5",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,31 +1,41 @@
 ---
 type: Component
 title: "Flue agents"
-description: "Every model call of aeion-core runs as a Flue agent (deepseek-v4.1-flash, reasoning at max) behind a loopback gateway that holds the OpenCode key, meters usage and serves the agents' tools."
+description: "Every model call of aeion-spec runs as a Flue + Pi agent behind ContextRelay and LiteLLM across 7 user-configured providers, with per-run tokens and isolated Goldfish contexts."
 status: stable
 sources:
-  - resource: ../../app/aeion/agents.py
-    title: "Gateway (relay and tool bridge), launcher, mock agents"
-  - resource: ../../app/aeion/llm.py
-    title: "Errors, meter, TLS trust, schema shapes"
-  - resource: ../../app/flue/src/common.ts
+  - resource: ../../app/packages/server/src/relay/context-relay.ts
+    title: "Loopback ContextRelay HTTP bridge, per-run tokens, idle timeout"
+  - resource: ../../app/packages/server/src/relay/litellm_bridge.py
+    title: "FastAPI + LiteLLM 7-provider gateway with x-opencode-session and SSE fallback"
+  - resource: ../../app/packages/server/src/relay/flue-runner.ts
+    title: "Flue subprocess launcher, Goldfish swarm parallel runner, cross-family review"
+  - resource: ../../app/packages/shared/src/providers.ts
+    title: "Catalog of 7 LiteLLM-backed providers and model family metadata"
+  - resource: ../../app/packages/shared/src/contracts.ts
+    title: "Agent role, finding, decision, and review TypeScript contracts"
+  - resource: ../../app/packages/shared/src/schemas.ts
+    title: "TypeBox/Elysia request and submission schemas"
+  - resource: ../../app/packages/shared/src/index.ts
+    title: "Shared package exports"
+  - resource: ../../app/packages/flue/package.json
+    title: "Pinned Flue 2.3.0 & Pi 1.4.0 harness versions"
+  - resource: ../../app/packages/flue/src/common.ts
     title: "Input blocks, bridge tools, typed submissions"
-  - resource: ../../app/flue/src/provider.ts
-    title: "Model registration through the relay"
-  - resource: ../../app/flue/src/observe.ts
-    title: "Event stream read by the server"
-  - resource: ../../app/flue/src/db.ts
+  - resource: ../../app/packages/flue/src/provider.ts
+    title: "Model registration through the loopback ContextRelay"
+  - resource: ../../app/packages/flue/src/observe.ts
+    title: "Structured JSONL event stream read by the server"
+  - resource: ../../app/packages/flue/src/db.ts
     title: "In-memory conversation store per run"
-  - resource: ../../app/flue/package.json
-    title: "Pinned harness versions"
-  - resource: ../../app/flue/src/agents/
-    title: "The twelve role agents"
-  - resource: ../../app/flue/src/skills/
-    title: "The seven skills"
-  - resource: ../../app/flue/src/tools/
-    title: "Tool definitions"
-  - resource: ../../app/tests/test_agents.py
-    title: "Contract tests, including a real flue run"
+  - resource: ../../app/packages/flue/src/agents/
+    title: "Dedicated Flue + Pi agent entrypoints"
+  - resource: ../../app/packages/flue/src/skills/
+    title: "Elephant-Goldfish and AxiomSpec skills"
+  - resource: ../../app/packages/flue/src/tools/
+    title: "Sandbox and structured submission tools"
+  - resource: ../../app/packages/server/test/platform.test.ts
+    title: "7-provider routing, loopback relay, and E2E contract tests"
 ---
 
 # Flue agents
@@ -34,34 +44,28 @@ sources:
 
 Run every piece of model work as a dedicated agent with only the tools and the skill its role needs,
 on the [Flue](https://flueframework.com/) harness (`@flue/cli` and `@flue/runtime` 2.3.0, on Pi's
-`@earendil-works/pi-ai` 1.4.0), with deepseek-v4.1-flash reasoning at its native maximum. Agents
-propose; the Python server validates, decides what is stored, and never lets an agent hold the key.
+`@earendil-works/pi-ai` 1.4.0), routed through LiteLLM across seven user-configured providers
+(`anthropic`, `openai`, `deepinfra`, `openrouter`, `mistral`, `deepseek`, `opencode-go`). Agents
+propose; the Bun/Elysia server validates, decrypts vault secrets only at dispatch time in memory, and
+never lets an agent hold plaintext API keys or write directly to source trees.
 
 ## Data sources
 
-- The OpenCode Go endpoint (`AEION_LLM_URL`, default `https://opencode.ai/inference/go/openai/v1/chat/completions`)
-  and `OPENCODE_API_KEY` from the environment or one line of `.env` / `app/aeion/.env`.
-- The agent definitions, skills and tools in `app/flue/src/`, installed with `npm ci` in `app/flue`.
-  `package.json` overrides the Model Context Protocol packages the harness pins (unused here) to their
-  patched releases, so the dependency scan stays clean.
+- Encrypted per-user API keys in `VaultCrypto` (decrypted just-in-time per relay call) and `OPENCODE_API_KEY`
+  for test runs; routed via `litellm_bridge.py` on loopback.
+- The agent definitions, skills, and tools in `app/packages/flue/src/`, installed with `bun install` in `app/`.
 
 ## Inputs
 
-One run per agent turn: `flue run src/agents/<role>.ts --message=<the turn's new text> --new --json`.
-Supporting material (documents, earlier conversation, persona name, submission shapes) goes in one
-input file that the agent appends once as tagged signals. The message and the input file never carry
-the same text: a duplicated payload doubles tokens and gives the model two versions to reconcile.
-`agents.single_payload` refuses a run whose blocks repeat the message, and `app/tests/test_agents.py`
-proves it on a real run: each marker appears exactly once in the request.
-
-A submit tool's parameters are the server's JSON Schema, converted to Valibot by the agent (`toValibot`),
-so the model sees typed fields; the schema is not repeated in the tool's description. A free-form object
-invited the model to send nested values as JSON-encoded strings, which the server then refused.
+One Bun subprocess per agent turn via `flue-runner.ts` (`elephant`, `goldfish`, `reviewer`, `drafter`,
+and specialist helpers). Structured evidence blocks, settled `DEC-*` decisions, and read-only OpenShell
+file slices enter via ContextRelay per-run input bundles.
 
 | Agent | Role | Tools | Skill |
 | --- | --- | --- | --- |
-| `elephant` | brainstorm conversation | `anchor_hypothesis` | `egm-brainstorm` |
-| `goldfish` | one fresh reviewer, vendored persona | none | none |
+| `elephant` | feature interview & codebase interrogation | `anchor_hypothesis`, `read_sandbox_file`, `list_sandbox_files` | `egm-brainstorm` |
+| `goldfish` | isolated fresh-context lens reviewer | `read_sandbox_file`, `list_sandbox_files` | none |
+| `reviewer` | cross-family automated reviewer | `submit_review`, `read_sandbox_file`, `list_sandbox_files` | none |
 | `synthesizer` | concepts brief | none | `egm-synthesis` |
 | `consolidator` | stage findings | `submit_findings` | `egm-synthesis` |
 | `drafter` | design document section | `ask_owner` | `egm-draft` |
@@ -75,35 +79,37 @@ invited the model to send nested values as JSON-encoded strings, which the serve
 
 ## Outputs
 
-The last model turn's text (Flue's envelope joins every turn; earlier turns are discarded), the
-accepted submissions, the run's usage and cost as OpenCode reports it, and a stream of events for the
-page: text chunks, `restart` when a later turn replaces streamed text, reasoning progress (character
-counts, never content) and tool activity.
+Structured text, typed tool payloads (`anchor_hypothesis`, `submit_review`), token/cost usage events via
+`AEION_EVENTS_FILE`, and SSE progress events streamed back to the Spec Studio drawer.
 
 ## Invariants
 
-- The OpenCode key stays in the server process: the agent receives a per-run token valid only on the
-  loopback gateway, which refuses unknown tokens and any other model (test_agents). A body whose
-  `Content-Length` is not plain digits (400) or exceeds 16 MB (413) is refused before it is read.
-- A submission is accepted only when it matches its schema; the deterministic checks then run on a
-  scratch copy and their failures go back to the agent as a tool result, at most `attempts` times. An
-  amendment (`amend_fragment`) carries only the items that change and is checked as a whole.
-- A run whose upstream finish reason is `length` is an error, never a complete answer.
-- A required submission missing at the end of a run is an error; plain text is never taken instead.
-- Requests carry `reasoning_effort: "max"` and `thinking: {type: "enabled"}` (test_agents).
-- Each server tool may be called at most 12 times per run.
+- Plaintext provider keys never cross into Flue child process environments: each child receives only an
+  ephemeral single-run `AEION_RELAY_TOKEN` bound to loopback `ContextRelay`, which forwards `x-aeion-session-id`
+  to `litellm_bridge.py` (`x-opencode-session` for OpenCode Go) with `X-Aeion-Bridge-Secret` verification.
+- Loopback URL checks reject non-loopback `AEION_RELAY_URL` targets before any model call.
+- Every Goldfish turn runs with zero conversation history (fresh isolated context).
+- Automated review requires cross-family separation between interview models and `reviewer` when
+  multiple providers/families are configured.
+- The review fails closed: a missing or malformed `submit_review` verdict reads as "revise", and every
+  structured submission is re-checked against its declared schema before it counts.
+- The LiteLLM bridge starts with an allowlisted environment (no ambient provider keys), must print its
+  ready line before a deadline, and has its output drained so it cannot block.
+- Each Goldfish persona's key is checked before the swarm starts; one persona that fails does not sink
+  the others, it becomes a MAJOR `GF-n-PERSONA-FAILED` finding.
+- The Model Mixer carries provider and model per role; its stored temperature and thinking level are
+  not passed to the agents, so the UI does not offer them.
 
 ## Determinism
 
-Model output varies; what is stored does not depend on it unchecked. Schemas, gates, export rules and
-renderers decide. The mock agents (`AEION_LLM=mock`) make every section testable offline.
+Schemas, gates, and export compilers determine state transitions; `AEION_LLM=mock` executes offline
+without network calls while exercising the full orchestration pipeline.
 
 ## Acceptance checks
 
-- [ ] `python3 -m unittest discover -s app/tests` passes, including the real `flue run` when Node and the harness are installed.
-- [ ] A live brainstorm turn streams the Elephant's answer and records a hypothesis through the tool.
+- [ ] `(cd app && bun test packages/server/test)` passes 7-provider routing and relay security checks.
+- [ ] Live OpenCode Go (`deepseek-v4.1-flash` + `claude-haiku-5-5`) round-trip completes via LiteLLM.
 
 ## Out of scope
 
-Hosting agents remotely, persisting Flue conversations (each run uses in-memory storage), and any
-model other than the one configured with `AEION_MODEL`.
+Storing multi-turn Flue state on disk across requests or exposing provider API keys to browser clients.

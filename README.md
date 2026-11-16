@@ -1,56 +1,62 @@
-# Æion Core
+# Æion Spec
 
-From a half-baked feature idea to the feature file a build factory implements, in one local web page.
+Zero-trust specification & adversarial Goldfish review workbench taking product releases from raw ideas
+to validated **AxiomSpec 0.3** (`axiomspec/0.3`) contracts and **aeion-observability** feature specifications
+with Builder API delivery.
 
-1. **Brainstorm.** The Elephant questions the idea until it is clear, then seven fresh Goldfish
-   reviewers attack it and a synthesizer writes the concepts brief
-   ([Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model)). Design documents
-   are drafted section by section and reviewed in five stages.
-2. **Spec studio.** A saved feature document (or one you drop) becomes AxiomSpec obligations in the
-   product's canonical `knowledge/spec/spec.json`. The template's deterministic gates check every
-   draft; the analyst fixes what fails; you answer what only you can decide, one question at a time.
-   On approval it exports the eight-section Markdown file and manifest row that
-   [aeion-observability](https://github.com/OualidGuennif/aeion-observability) builds.
-3. **Docs.** Every document in one tree with search, pages with their system, process, sequence and
-   use-case diagrams, and an assistant that answers from the pages and the AxiomSpec knowledge graph
-   with citations it cannot invent.
-
-Every model call runs as a dedicated [Flue](https://flueframework.com/) agent (twelve roles, each with
-its own tools and skill) on OpenCode Go's `deepseek-v4.1-flash`, reasoning at its maximum.
+1. **Auth, Ephemeral Invite Mode & AES-256-GCM Vault.** Registered accounts persist release sheets and
+   encrypted provider secrets (Argon2id + per-user DEK wrapped by AES-256-GCM + HKDF-SHA256); Invite Mode
+   runs strictly in memory (`:memory:`) with zero disk persistence and instant wipe on exit or TTL expiry.
+2. **Release Tableau & Dual-Satisfaction Goldfish Loop.** Manage scoped releases across `Idea` →
+   `Goldfish Interview` → `Automated Review` → `Validated`. Elephant interrogates requirements while
+   fresh zero-history Goldfish personas attack independently via Flue (`@flue/runtime` 2.3.0) + Pi
+   (`@earendil-works/pi-ai` 1.4.0) behind a loopback ContextRelay + LiteLLM bridge supporting 7 providers
+   (`anthropic`, `openai`, `deepinfra`, `openrouter`, `mistral`, `deepseek`, `opencode-go`) and per-role
+   model mixing.
+3. **Zero-Trust OpenShell Source Quarantine.** Projects support greenfield `empty` sources, `github_public`,
+   `github_private` (read-only PAT inside vault), and `archive_upload` (strictly `<= 100 MB` ZIP/TAR with
+   traversal, symlink/O_NOFOLLOW, zip-bomb, and secret-redaction checks). Every clone/extraction and probe
+   runs isolated via NVIDIA OpenShell (`openshell`) / Docker / strict Landlock confinement.
+4. **AxiomSpec 0.3 + Observability Export + Builder API.** Automated Review enforces cross-family model
+   separation, Axiom03 gates `G01–G14`, and 8-section Observability exports (`<= 12,000 B`). Validating
+   a release seals cumulative specifications (HMAC-SHA256 signature + G14 delta audit), archives release
+   history, clears the active sheet, and exposes sealed artifacts via scoped Builder Bearer tokens
+   (`/api/v1/builder/projects/:slug/spec`).
 
 ## Run it
 
-Requirements: Python 3.11+, Node.js 22.19+ (for the agents), an [OpenCode Go](https://opencode.ai/) key.
+Requirements: **Bun 1.2+**, **Python 3.11+**, `.venv` (with `litellm`, `fastapi`, `uvicorn`, `jsonschema`),
+and optional NVIDIA `openshell` + Docker for microVM isolation.
 
 ```bash
-cd app/flue && npm ci && cd ../..          # the agent harness, once
-echo 'OPENCODE_API_KEY=...' > .env         # or app/aeion/.env; never committed
-python3 app/serve                          # http://127.0.0.1:8765
+cd app && bun install --frozen-lockfile && bun --cwd packages/web build && cd ..
+python3 -m venv .venv && .venv/bin/pip install fastapi uvicorn litellm jsonschema
+echo 'OPENCODE_API_KEY=...' > .env         # optional server/test env; never committed
+./app/serve                                # Next.js http://127.0.0.1:4170 + Elysia :4171
 ```
 
-`AEION_LLM=mock python3 app/serve` runs offline with scripted agents. Settings: `AEION_DATA`
-(workspace, default `workspace/`), `AEION_OBSERVABILITY` (default `../aeion-observability`, read only),
-`AEION_PORT`, `AEION_HOST` (a loopback address only), `AEION_MODEL`. The server answers this machine only.
+`AEION_LLM=mock ./app/serve` runs fully offline with deterministic scripted Flue agents.
 
 ## How it is built
 
 | Part | Where | Spec |
 | --- | --- | --- |
-| Web server, store, page | `app/aeion/server.py`, `store.py`, `app/web/` | [aeion-engine](knowledge/components/aeion-engine.md) |
-| Flue agents, gateway, skills, tools | `app/aeion/agents.py`, `app/flue/` | [aeion-agents](knowledge/components/aeion-agents.md) |
-| Brainstorm, design, Goldfish review | `app/aeion/brainstorm.py`, `design.py`, `goldfish/` | [goldfish](knowledge/components/goldfish.md) |
-| Spec studio and export | `app/aeion/specstudio.py`, `app/aeion/profiles/` | [spec-studio](knowledge/components/spec-studio.md) |
-| Documentation hub | `app/aeion/docshub.py` | [docs-hub](knowledge/components/docs-hub.md) |
-| AxiomSpec toolkit (template) | `tools/axiom/` | [axiom-toolkit](knowledge/components/axiom-toolkit.md) |
+| Elysia API, Vault, SQLite & Release Engine | `app/packages/server/src/` | [aeion-engine](knowledge/components/aeion-engine.md) |
+| Flue + Pi agents, skills, sandbox tools, ContextRelay | `app/packages/flue/`, `app/packages/server/src/relay/` | [aeion-agents](knowledge/components/aeion-agents.md) |
+| Tableau orchestrator & Goldfish rounds | `app/packages/server/src/tableau/orchestrator.ts` | [goldfish](knowledge/components/goldfish.md) |
+| Next.js glass UI (light and dark) & Observability export | `app/packages/web/`, `app/packages/server/src/observability/` | [spec-studio](knowledge/components/spec-studio.md) |
+| OpenShell quarantine & read-only snapshots | `app/openshell/`, `app/packages/server/src/openshell/` | [openshell](knowledge/components/openshell.md) |
+| AxiomSpec 0.3 validator & approvals | `app/axiom03/` | [aeion-engine](knowledge/components/aeion-engine.md) |
 
-The key stays in the Python process: agents reach the model through a loopback gateway with a
-per-run token. Nothing is ever written into aeion-observability.
+Secrets stay inside AES-256-GCM vault envelopes and loopback `ContextRelay` per-run tokens; no agent or
+provider payload ever receives plaintext credentials, and `aeion-spec` never writes into target repositories.
 
 ## Tests
 
 ```bash
-python3 -m unittest discover -s app/tests     # includes one real `flue run` against a scripted upstream
-./tools/axiom/axiom check                     # this project's own specification and generated docs
+(cd app && bun test packages/server/test && bun run typecheck && bun --cwd packages/web build)
+.venv/bin/python -m unittest discover -s app/tests -v
+./tools/template-tests && ./tools/knowledge/knowledge-check && ./tools/knowledge/doc-links && ./tools/repo-health/repo-health
 ```
 
-Built from [Æion Factory](https://github.com/OualidGuennif/aeion-factory) 3.0.0.
+Built from [Æion Template](https://github.com/OualidGuennif/aeion-template) 4.0.3.

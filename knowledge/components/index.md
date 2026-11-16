@@ -4,7 +4,7 @@ title: "Components index"
 description: "One spec per unit."
 status: stable
 generated:
-  by: aeion-factory/1.0
+  by: aeion-template/1.0
   at: 2026-10-20T00:00:00Z
 ---
 
@@ -16,10 +16,12 @@ Start from [the template](_template.md).
 | Component | Status | Notes |
 | --- | --- | --- |
 | [Integration choices](context-and-architecture.md) | stable | scoped upstream adoption and runtime qualification boundaries |
-| [Æion Factory architecture](factory-architecture.md) | stable | complete spec; its diagrams are in the [cockpit](../../docs/README.md) |
-| [Axiom toolkit](axiom-toolkit.md) | stable | `tools/axiom/axiom`: AxiomSpec gates, knowledge graph, queries, packets, views, cockpit, export, evidence |
-| [aeion-core engine](aeion-engine.md) | stable | `app/aeion`: server, store, settings, safe Markdown, the page |
-| [Flue agents](aeion-agents.md) | stable | `app/flue` and `app/aeion/agents.py`: twelve role agents, gateway, skills, tools |
-| [Brainstorm and design](goldfish.md) | stable | the Elephant-Goldfish Model: brainstorm, drafting, five review stages |
-| [Spec studio](spec-studio.md) | stable | AxiomSpec drafting with gates, the owner's interview, export for aeion-observability |
-| [Documentation hub](docs-hub.md) | stable | tree, search, pages with diagrams, the cited librarian |
+| [Æion Template architecture](template-architecture.md) | stable | complete spec, with its diagrams |
+| [Framework mode and the owner's settings](framework-mode.md) | draft | the doc gate's mode and the aeion-framework address; off by default |
+| [Doc gate](doc-gate.md) | draft | the docs covering a file are read before it is edited; enforce, warn or off |
+| [aeion-spec engine](aeion-engine.md) | stable | `app/packages/server`: Elysia API, SQLite store, Vault, ContextRelay, Axiom03 bridge |
+| [Flue agents](aeion-agents.md) | stable | `app/packages/flue` & `app/packages/shared`: Pi + Flue agents, LiteLLM routing, tools, skills |
+| [Brainstorm and design](goldfish.md) | stable | Elephant-Goldfish Model tableau orchestration, isolated fresh reviews, dual satisfaction |
+| [Spec studio](spec-studio.md) | stable | Next.js glass UI, AxiomSpec 0.3 G01-G14 checks, Observability export, release sealing |
+| [OpenShell quarantine](openshell.md) | stable | `app/openshell/`: archive and GitHub quarantine, secret scrubbing, read-only snapshots |
+| [Documentation hub](docs-hub.md) | deprecated | the generated `docs/` cockpit, frozen since its engine left in 4.0.3 |

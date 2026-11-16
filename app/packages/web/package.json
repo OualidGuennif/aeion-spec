@@ -1,0 +1,25 @@
+{
+  "name": "@aeion-spec/web",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 4170",
+    "build": "next build",
+    "start": "next start -p 4170",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aeion-spec/server": "workspace:*",
+    "@aeion-spec/shared": "workspace:*",
+    "@elysiajs/eden": "1.4.9",
+    "next": "16.4.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2"
+  }
+}

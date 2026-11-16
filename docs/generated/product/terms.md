@@ -4,5 +4,5 @@
 
 | ID | Term | Definition | Unit | Context |
 | --- | --- | --- | --- | --- |
-| <a id="term-001"></a>TERM-001 | Agent run | One flue run of one role agent: one message, one input file, a disposable conversation. | - | aeion-core |
-| <a id="term-002"></a>TERM-002 | Submission | A typed result an agent passes to a submit tool; stored only after its schema and checks. | - | aeion-core |
+| <a id="term-001"></a>TERM-001 | Agent run | One flue run of one role agent: one message, one input file, a disposable conversation. | - | aeion-spec |
+| <a id="term-002"></a>TERM-002 | Submission | A typed result an agent passes to a submit tool; stored only after its schema and checks. | - | aeion-spec |

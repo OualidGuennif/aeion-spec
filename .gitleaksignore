@@ -2,3 +2,5 @@
 # Verified false positives: one gitleaks fingerprint per line, with why.
 # A Fresh island key (an idea ULID) in a demo evidence file, not a credential.
 a3f76f74c2b609ee4de10afe93e9d6bdf53843e4:demo/codex/journal/evidence/03-quality-fixed.txt:generic-api-key:82
+# A made-up vault test value ("sk-or-v1-temp-invite-secret-9999"), stored to check it is never returned.
+26f544488ad36981a29ac2d10011b16548a7e3a7:app/packages/server/test/platform.test.ts:generic-api-key:129

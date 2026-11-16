@@ -18,30 +18,40 @@ jobs:
         with:
           fetch-depth: 0
       - run: ./tools/knowledge/knowledge-check
-      - name: AxiomSpec gate (structure, references, generated docs current)
-        run: ./tools/axiom/axiom check
       - name: doc-links (with --diff on pull requests)
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [[ -n "$BASE_REF" ]]; then ./tools/knowledge/doc-links --diff "origin/$BASE_REF"; else ./tools/knowledge/doc-links; fi
       - run: ./tools/repo-health/repo-health
-      - run: ./tools/factory-tests
-      - name: efficiency bundle is current
-        run: ./tools/efficiency/bundle && git diff --exit-code efficiency/efficiency-bundle.md
+      - run: ./tools/template-tests
 
   app-tests:
+    # main's branch protection requires a check by exactly this name; a rename blocks every release merge.
     name: Application tests (Python, with the Flue harness)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      # A pinned action instead of piping an install script into a shell.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: '22'
-      - name: Install the pinned agent harness (no install scripts)
-        working-directory: app/flue
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: python3 -m unittest discover -s app/tests -v
+          bun-version: 1.4.4
+      # Exact pins, the versions the local suite passes with: an unpinned install takes whatever the index serves.
+      - name: Set up Python .venv for OpenShell, Axiom03, and LiteLLM tests
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir fastapi==0.163.1 uvicorn==0.54.0 litellm==1.109.1 jsonschema==4.26.0 cryptography==50.0.2
+      - name: Install JS workspace packages and build Next.js UI
+        working-directory: app
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun --cwd packages/web build
+      - name: Run Bun server unit/integration tests
+        working-directory: app
+        run: bun test packages/server/test
+      - name: Run Python OpenShell & Axiom03 contract tests
+        run: .venv/bin/python -m unittest discover -s app/tests -v
 
   secret-scan:
     runs-on: ubuntu-latest
@@ -70,6 +80,5 @@ jobs:
     container: semgrep/semgrep@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6 # 1.182.1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      # demo/ is a playground left out of release archives; only the shipped factory is scanned.
-      - run: semgrep scan --config p/owasp-top-ten --error --exclude demo
+      - run: semgrep scan --config p/owasp-top-ten --error
 # Keep action revisions pinned; review upstream changes before updating them.
