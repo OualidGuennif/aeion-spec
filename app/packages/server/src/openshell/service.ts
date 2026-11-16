@@ -1,4 +1,4 @@
-// Spec: knowledge/components/factory-architecture.md
+// Spec: knowledge/components/openshell.md
 
 import {
   existsSync,

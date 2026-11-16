@@ -20,10 +20,6 @@ sources:
     title: "Export profile (frontmatter and section texts)"
   - resource: ../../app/packages/server/profiles/aeion-observability-target.json
     title: "Build-factory rules (areas, phases, scopes, delivery steps)"
-  - resource: ../../tools/axiom/spec.py
-    title: "The template's gates"
-  - resource: ../../tools/axiom/docs.py
-    title: "Feature export and product documentation"
   - resource: ../../app/packages/server/test/platform.test.ts
     title: "Studio export, Axiom03 compilation, and release sealing tests"
 ---

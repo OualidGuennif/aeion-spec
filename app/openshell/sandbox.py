@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Spec: knowledge/components/factory-architecture.md
+# Spec: knowledge/components/openshell.md
 """OpenShell 0.1.8 & hardened Docker sandbox driver for quarantined aeion-spec projects."""
 from __future__ import annotations
 

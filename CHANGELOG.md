@@ -6,6 +6,11 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+- Updated Æion Factory 3.0.0 to Æion Template 4.0.3: the marker is `.aeion-template`, CI runs
+  `tools/template-tests` and no longer runs `axiom check` or the efficiency bundle, and the doc gate now
+  asks for a file's docs to be read before it is edited. The embedded AxiomSpec engine, `efficiency/` and
+  `knowledge/axiomspec/` left the repository. `knowledge/spec/` and the `docs/` cockpit stay frozen until
+  migrated to aeion-framework. OpenShell has its own spec (`knowledge/components/openshell.md`).
 - Rebuilt the application as **Æion Spec** (`aeion-spec`) on Bun + Elysia + Eden Treaty + Next.js with
   dual-mode auth (Argon2id accounts & ephemeral `:memory:` Invite Mode) and an AES-256-GCM + HKDF-SHA256
   user vault for provider API keys and read-only GitHub tokens.

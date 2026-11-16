@@ -44,9 +44,9 @@ echo 'OPENCODE_API_KEY=...' > .env         # optional server/test env; never com
 | Elysia API, Vault, SQLite & Release Engine | `app/packages/server/src/` | [aeion-engine](knowledge/components/aeion-engine.md) |
 | Flue + Pi agents, skills, sandbox tools, ContextRelay | `app/packages/flue/`, `app/packages/server/src/relay/` | [aeion-agents](knowledge/components/aeion-agents.md) |
 | Tableau orchestrator & Goldfish rounds | `app/packages/server/src/tableau/orchestrator.ts` | [goldfish](knowledge/components/goldfish.md) |
-| Next.js UI (Atelier Light / Deep Obsidian) & Observability export | `app/packages/web/`, `app/packages/server/src/observability/` | [spec-studio](knowledge/components/spec-studio.md) |
-| OpenShell quarantine & microVM confinement | `app/openshell/`, `app/packages/server/src/openshell/` | [factory-architecture](knowledge/components/factory-architecture.md) |
-| AxiomSpec 0.3 & factory toolkit | `app/axiom03/`, `tools/axiom/` | [axiom-toolkit](knowledge/components/axiom-toolkit.md) |
+| Next.js glass UI (light and dark) & Observability export | `app/packages/web/`, `app/packages/server/src/observability/` | [spec-studio](knowledge/components/spec-studio.md) |
+| OpenShell quarantine & read-only snapshots | `app/openshell/`, `app/packages/server/src/openshell/` | [openshell](knowledge/components/openshell.md) |
+| AxiomSpec 0.3 validator & approvals | `app/axiom03/` | [aeion-engine](knowledge/components/aeion-engine.md) |
 
 Secrets stay inside AES-256-GCM vault envelopes and loopback `ContextRelay` per-run tokens; no agent or
 provider payload ever receives plaintext credentials, and `aeion-spec` never writes into target repositories.
@@ -56,7 +56,7 @@ provider payload ever receives plaintext credentials, and `aeion-spec` never wri
 ```bash
 (cd app && bun test packages/server/test && bun run typecheck && bun --cwd packages/web build)
 .venv/bin/python -m unittest discover -s app/tests -v
-./tools/axiom/axiom check && ./tools/knowledge/knowledge-check && ./tools/knowledge/doc-links && ./tools/repo-health/repo-health
+./tools/template-tests && ./tools/knowledge/knowledge-check && ./tools/knowledge/doc-links && ./tools/repo-health/repo-health
 ```
 
-Built from [Æion Factory](https://github.com/OualidGuennif/aeion-factory) 3.0.0.
+Built from [Æion Template](https://github.com/OualidGuennif/aeion-template) 4.0.3.

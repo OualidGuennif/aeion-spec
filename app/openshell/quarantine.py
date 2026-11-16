@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Spec: knowledge/components/factory-architecture.md
+# Spec: knowledge/components/openshell.md
 """Zero-trust archive & GitHub repository quarantine, symlink guard, and secret scrubber."""
 from __future__ import annotations
 
