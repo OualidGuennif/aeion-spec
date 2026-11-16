@@ -6,14 +6,50 @@ import type { SessionUser } from "@aeion-spec/shared";
 import { createApiClient, unwrap } from "../lib/api.ts";
 
 interface AuthGateProps {
-  // Resolves once the workspace has loaded, so a failure is shown here rather than lost.
+  // Resolves once the workspace loads so any startup failure stays visible on this screen.
   onAuthenticated: (user: SessionUser, builderTokenPlain?: string) => Promise<void>;
 }
 
-const STEPS = [
-  { title: "Describe a feature", body: "Drop an idea on the board, alone or with your codebase." },
-  { title: "Face the Goldfish", body: "Eight fresh-context reviewers question it until nothing is left open." },
-  { title: "Ship a sealed spec", body: "Gates, a cross-family review, then a signed release builders can read." },
+function StepIcon({ kind }: { kind: "board" | "review" | "seal" }) {
+  if (kind === "board") {
+    return (
+      <svg className="journey-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+        <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" />
+        <path d="M7.5 3.5v13M12.5 3.5v13" />
+      </svg>
+    );
+  }
+  if (kind === "review") {
+    return (
+      <svg className="journey-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5v5a2.5 2.5 0 0 1-2.5 2.5H9l-3.5 3v-3H6.5A2.5 2.5 0 0 1 4 10.5v-5Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="journey-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+      <path d="M10 2.5 16 5v4.8c0 3.7-2.6 6.7-6 7.7-3.4-1-6-4-6-7.7V5l6-2.5Z" />
+      <path d="m7.5 10 1.8 1.8 3.4-3.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const STEPS: Array<{ icon: "board" | "review" | "seal"; title: string; body: string }> = [
+  {
+    icon: "board",
+    title: "Scope the work",
+    body: "Add a feature to your release board, alone or beside a quarantined codebase.",
+  },
+  {
+    icon: "review",
+    title: "Test every angle",
+    body: "Answer Elephant's questions while eight reviewers probe security, reliability, UX, and cost.",
+  },
+  {
+    icon: "seal",
+    title: "Seal the contract",
+    body: "Run AxiomSpec gates across model families, then serve a signed spec over the Builder API.",
+  },
 ];
 
 export function AuthGate({ onAuthenticated }: AuthGateProps) {
@@ -67,25 +103,22 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
   return (
     <div className="auth-grid">
       <section className="auth-hero">
-        <span className="eyebrow">Æion Spec</span>
-        <h1>Specs that survive a room full of skeptics.</h1>
+        <h1>Specs that hold up before anyone writes code.</h1>
         <p className="lead">
-          An Elephant interviews you, a swarm of Goldfish reviewers with no shared memory challenges every answer,
-          and only a spec that passes the AxiomSpec gates gets sealed.
+          Discuss a feature with Elephant, test it against eight zero-memory Goldfish reviewers, and seal an AxiomSpec
+          contract that builders can read.
         </p>
-        <ol className="journey">
-          {STEPS.map((s, i) => (
+        <ul className="journey">
+          {STEPS.map((s) => (
             <li key={s.title} className="journey-step">
-              <span className="step-dot tabular" aria-hidden="true">
-                {i + 1}
-              </span>
+              <StepIcon kind={s.icon} />
               <div>
                 <strong>{s.title}</strong>
                 <span className="muted">{s.body}</span>
               </div>
             </li>
           ))}
-        </ol>
+        </ul>
       </section>
 
       <section className="panel auth-card" aria-label="Sign in">
@@ -164,7 +197,7 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
           )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-            {busy ? "One moment…" : tab === "login" ? "Sign in" : "Create account"}
+            {busy ? "Signing in..." : tab === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
 
@@ -174,9 +207,9 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
 
         <div className="invite-box">
           <div>
-            <strong>Try it as a guest</strong>
+            <strong>Try without an account</strong>
             <p className="muted">
-              Everything stays in memory and is erased when you leave. No account, nothing written to disk.
+              Your projects, keys, and interviews stay in memory and disappear when you leave or close your session.
             </p>
           </div>
           <button type="button" className="btn btn-block" disabled={busy} onClick={() => void launchInvite()}>

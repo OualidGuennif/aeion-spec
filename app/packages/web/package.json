@@ -9,6 +9,11 @@
     "start": "next start -p 4170",
     "typecheck": "tsc --noEmit"
   },
+  "browserslist": [
+    "defaults",
+    "safari >= 14",
+    "chrome >= 90"
+  ],
   "dependencies": {
     "@aeion-spec/server": "workspace:*",
     "@aeion-spec/shared": "workspace:*",

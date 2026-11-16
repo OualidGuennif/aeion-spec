@@ -6,6 +6,15 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
+- Redesigned the Spec Studio web UI around an OpenAI-style monochrome black-and-white palette with a
+  subtle Anthropic warm paper/clay touch and midnight blue focus/links, and simplified navigation into
+  a 3-tab shell (`Workspace`, `Releases`, `Keys`) with project creation inside the project menu, a compact
+  session menu, and a guided 4-step feature pipeline (`Ideas`, `Interview`, `Review`, `Validated`) with
+  clear next-step guidance, `impeccable` craft cleanup, `humanizer` copy, and `temporary_tools/`
+  gitignored.
+
 ## [0.2.0] - 2026-11-16
 
 - A card is refused with 409 while a model run works on it, so an edit is no longer lost when the run

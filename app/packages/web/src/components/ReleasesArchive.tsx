@@ -20,6 +20,12 @@ function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const copy = async () => {
@@ -56,7 +62,6 @@ export function ReleasesArchive({
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The browser origin is the address the owner can actually reach; the API sits behind it.
   const [origin, setOrigin] = useState("http://127.0.0.1:4170");
 
   useEffect(() => {
@@ -97,7 +102,7 @@ export function ReleasesArchive({
           .get(),
       );
       setDiffReport(res);
-    }, "The comparison failed.");
+    }, "The release comparison failed.");
 
   const rotateToken = () =>
     run(async () => {
@@ -121,9 +126,10 @@ export function ReleasesArchive({
   return (
     <div className="stack">
       <div className="page-header">
-        <span className="eyebrow">{project.name}</span>
         <h1>Releases and sources</h1>
-        <p className="muted">Sealed specs, their differences, the Builder API, and the quarantined source.</p>
+        <p className="muted">
+          Sealed specs, release comparisons, Builder API credentials, and quarantined source files for {project.name}.
+        </p>
       </div>
 
       {error && (
@@ -139,7 +145,7 @@ export function ReleasesArchive({
         <div className="panel-header">
           <div>
             <h2 id="history-title">Release history</h2>
-            <p className="muted">Each sealed release keeps its AxiomSpec snapshot and Observability bundle.</p>
+            <p className="muted">Each sealed release stores an AxiomSpec snapshot and an Observability bundle.</p>
           </div>
           <span className="count-pill tabular">{sealedReleases.length} sealed</span>
         </div>
@@ -152,7 +158,7 @@ export function ReleasesArchive({
                 <strong>{r.title}</strong>
                 <span className="muted tabular">
                   {r.status === "sealed"
-                    ? `${r.bumpKind ?? "unknown"} bump · risk ${r.riskScore ?? "unknown"} · ${r.validatedCount} features`
+                    ? `${r.bumpKind ?? "unknown"} bump · risk ${r.riskScore ?? "unknown"} · ${r.validatedCount} feature${r.validatedCount === 1 ? "" : "s"}`
                     : "In progress"}
                 </span>
               </div>
@@ -160,17 +166,17 @@ export function ReleasesArchive({
                 {r.status === "sealed" ? "Sealed" : "Active"}
               </span>
               <span className="mono release-digest" title={r.sealedDigest ?? undefined}>
-                {r.sealedDigest ? `${r.sealedDigest.slice(0, 12)}…` : "no digest"}
+                {r.sealedDigest ? `${r.sealedDigest.slice(0, 12)}...` : "no digest"}
               </span>
               <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void inspectRelease(r.id)}>
-                View
+                Inspect
               </button>
             </li>
           ))}
         </ul>
 
         {selectedRelease && (
-          <div className="panel-inset stack">
+          <div className="section-block">
             <div className="panel-header">
               <h3>
                 v{selectedRelease.version} · {selectedRelease.title}
@@ -178,6 +184,24 @@ export function ReleasesArchive({
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedRelease(null)}>
                 Close
               </button>
+            </div>
+            <div className="stat-strip">
+              <div className="stat">
+                <span className="stat-value">{selectedRelease.status === "sealed" ? "Sealed" : "Active"}</span>
+                <span className="stat-label">status</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">{selectedRelease.bumpKind ?? "unknown"}</span>
+                <span className="stat-label">bump</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value tabular">{selectedRelease.riskScore ?? "unknown"}</span>
+                <span className="stat-label">risk score</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value tabular">{snapshotCards.length}</span>
+                <span className="stat-label">features</span>
+              </div>
             </div>
             {selectedRelease.notes && <p>{selectedRelease.notes}</p>}
             {snapshotCards.length > 0 ? (
@@ -189,16 +213,19 @@ export function ReleasesArchive({
                 ))}
               </div>
             ) : (
-              <p className="muted">No features were captured in this release.</p>
+              <p className="muted">No features were sealed in this release.</p>
             )}
             {selectedRelease.observabilityManifestJson && (
-              <pre className="code-block">{JSON.stringify(selectedRelease.observabilityManifestJson, null, 2)}</pre>
+              <details className="subtle-disclosure">
+                <summary>View Observability manifest JSON</summary>
+                <pre className="code-block">{JSON.stringify(selectedRelease.observabilityManifestJson, null, 2)}</pre>
+              </details>
             )}
           </div>
         )}
 
         {sealedReleases.length >= 2 && (
-          <div className="panel-inset stack">
+          <div className="section-block">
             <h3>Compare two sealed releases</h3>
             <div className="row-gap">
               <select
@@ -207,7 +234,7 @@ export function ReleasesArchive({
                 value={compareFrom}
                 onChange={(e) => setCompareFrom(e.target.value)}
               >
-                <option value="">From…</option>
+                <option value="">From...</option>
                 {sealedReleases.map((r) => (
                   <option key={r.id} value={r.id}>
                     v{r.version} · {r.title}
@@ -220,7 +247,7 @@ export function ReleasesArchive({
                 value={compareTo}
                 onChange={(e) => setCompareTo(e.target.value)}
               >
-                <option value="">To…</option>
+                <option value="">To...</option>
                 {sealedReleases.map((r) => (
                   <option key={r.id} value={r.id}>
                     v{r.version} · {r.title}
@@ -275,7 +302,7 @@ export function ReleasesArchive({
         <div className="panel-header">
           <div>
             <h2 id="builder-title">Builder API</h2>
-            <p className="muted">Builder agents read validated specs with a read-only bearer token.</p>
+            <p className="muted">Builder agents fetch sealed specs with a read-only bearer token.</p>
           </div>
           {confirmRotate ? (
             <span className="row-gap">
@@ -293,16 +320,18 @@ export function ReleasesArchive({
           )}
         </div>
         {confirmRotate && (
-          <div className="notice notice-warn">Rotating stops the current token at once for every builder using it.</div>
+          <div className="notice notice-warn">
+            Rotating stops the current token immediately for any builder using it.
+          </div>
         )}
         <div className="token-row">
           <span className="mono token-value">
-            {builderTokenPlain || builderTokenPreview || "No token yet: rotate to create one"}
+            {builderTokenPlain || builderTokenPreview || "No token yet; rotate to create one"}
           </span>
           {builderTokenPlain && <CopyButton text={builderTokenPlain} label="Copy builder token" />}
         </div>
         {builderTokenPlain && (
-          <p className="hint">This is the only time the full token is shown. Store it before leaving the page.</p>
+          <p className="hint">Save this token now. It is hidden after you leave or reload the page.</p>
         )}
         <div className="code-wrap">
           <pre className="code-block">{curl}</pre>
@@ -314,7 +343,7 @@ export function ReleasesArchive({
         <div className="panel-header">
           <div>
             <h2 id="source-title">Quarantined source</h2>
-            <p className="muted">Read-only, network-isolated snapshot with archive, symlink and secret checks.</p>
+            <p className="muted">Read-only snapshot with no network access, symlink checks, and secret redaction.</p>
           </div>
           {project.sourceKind !== "empty" && (
             <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void loadSandboxFiles()}>
@@ -324,7 +353,30 @@ export function ReleasesArchive({
         </div>
 
         {project.openshellSummary ? (
-          <pre className="code-block">{JSON.stringify(project.openshellSummary, null, 2)}</pre>
+          <div className="stack">
+            <div className="stat-strip">
+              <div className="stat">
+                <span className="stat-value">{project.openshellSummary.mode}</span>
+                <span className="stat-label">isolation</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value tabular">{project.openshellSummary.fileCount.toLocaleString()}</span>
+                <span className="stat-label">files</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value tabular">{formatBytes(project.openshellSummary.totalBytes)}</span>
+                <span className="stat-label">size</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value tabular">{project.openshellSummary.redactedSecretsCount}</span>
+                <span className="stat-label">redacted secrets</span>
+              </div>
+            </div>
+            <details className="subtle-disclosure">
+              <summary>View raw OpenShell summary JSON</summary>
+              <pre className="code-block">{JSON.stringify(project.openshellSummary, null, 2)}</pre>
+            </details>
+          </div>
         ) : (
           <p className="muted">This project started empty, so there is no source snapshot.</p>
         )}
@@ -337,7 +389,7 @@ export function ReleasesArchive({
                   ? `Showing ${FILE_LIST_LIMIT} of ${sandboxFiles.length} files`
                   : `${sandboxFiles.length} files`}
               </span>
-              {sandboxFiles.length === 0 && <p className="muted">No files are held for this project right now.</p>}
+              {sandboxFiles.length === 0 && <p className="muted">No files are stored for this project right now.</p>}
               {sandboxFiles.slice(0, FILE_LIST_LIMIT).map((f) => (
                 <button
                   key={f}

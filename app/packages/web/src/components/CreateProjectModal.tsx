@@ -14,8 +14,8 @@ interface CreateProjectModalProps {
 
 const SOURCES: Array<{ id: SourceKind; title: string; note: string }> = [
   { id: "empty", title: "Start empty", note: "Spec only, no codebase" },
-  { id: "github_public", title: "Public GitHub", note: "Read-only clone into OpenShell" },
-  { id: "github_private", title: "Private GitHub", note: "Read-only token from the vault" },
+  { id: "github_public", title: "Public GitHub", note: "Read-only clone in OpenShell" },
+  { id: "github_private", title: "Private GitHub", note: "Uses a vault read-only token" },
   { id: "upload", title: "Upload archive", note: ".zip or .tar.gz up to 100 MiB" },
 ];
 
@@ -36,7 +36,7 @@ async function uploadArchive(projectId: string, file: File, csrfToken: string) {
   try {
     body = await res.json();
   } catch {
-    // A proxy may answer with HTML; the status still tells what happened.
+    // Some reverse proxies return HTML on 502/504; the HTTP status still tells us what failed.
   }
   if (!res.ok) throw new Error(body.error || `The archive upload failed (${res.status}).`);
   return body.summary ?? null;
@@ -52,10 +52,10 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
   const ghKeys = vaultKeys.filter((k) => k.purpose === "github_readonly");
   const [githubKeyId, setGithubKeyId] = useState<string>(ghKeys[0]?.id ?? "");
   const [inlineGhPat, setInlineGhPat] = useState("");
-  // A token typed here is stored once; a retry reuses it instead of sealing a duplicate.
+  // Reuse the sealed key ID on retry instead of creating duplicate vault entries.
   const [storedPatKeyId, setStoredPatKeyId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  // A project whose upload failed already exists; a retry only repeats the upload.
+  // If the archive upload fails after the project row exists, retry only the upload step.
   const [pendingProject, setPendingProject] = useState<ProjectRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,15 +78,14 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
     e.preventDefault();
     setError(null);
 
-    // Check everything local before the first request, so nothing half-created is left behind.
     if (sourceKind === "upload") {
       if (!uploadFile) return setError("Choose a .zip or .tar.gz archive.");
       if (uploadFile.size > MAX_UPLOAD_BYTES) {
-        return setError(`The archive is ${mib(uploadFile.size)} MiB; the limit is ${mib(MAX_UPLOAD_BYTES)} MiB.`);
+        return setError(`The archive is ${mib(uploadFile.size)} MiB, above the ${mib(MAX_UPLOAD_BYTES)} MiB limit.`);
       }
     }
     if (sourceKind === "github_private" && !githubKeyId && !storedPatKeyId && !inlineGhPat.trim()) {
-      return setError("Pick a stored read-only GitHub token or paste a new one.");
+      return setError("Select a stored read-only GitHub token or paste a new one.");
     }
 
     setBusy(true);
@@ -150,17 +149,19 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
       <div className="modal-box" role="dialog" aria-modal="true" aria-labelledby="new-project-title">
         <div className="panel-header">
           <div>
-            <span className="eyebrow">New project</span>
-            <h2 id="new-project-title">What are you specifying?</h2>
+            <h2 id="new-project-title">New project</h2>
+            <p className="muted">Choose whether to attach a codebase and name your project.</p>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={close}>
-            ×
+          <button type="button" className="icon-btn" aria-label="Close dialog" onClick={close}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="stack">
           <fieldset className="source-picker" disabled={!!pendingProject}>
-            <legend className="field-legend">Source</legend>
+            <legend className="field-legend">Codebase source</legend>
             {SOURCES.map((s) => (
               <label key={s.id} className={`source-option ${sourceKind === s.id ? "active" : ""}`}>
                 <input
@@ -175,59 +176,6 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
               </label>
             ))}
           </fieldset>
-
-          <div className="grid-2">
-            <div className="field">
-              <label htmlFor="proj-name">Project name</label>
-              <input
-                id="proj-name"
-                className="input"
-                required
-                minLength={2}
-                disabled={!!pendingProject}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Payments settlement core"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="proj-ver">First version</label>
-              <input
-                id="proj-ver"
-                className="input tabular mono"
-                required
-                disabled={!!pendingProject}
-                pattern="^v?\d+\.\d+\.\d+$"
-                value={releaseVersion}
-                onChange={(e) => setReleaseVersion(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="field">
-            <label htmlFor="proj-rel-title">First release title</label>
-            <input
-              id="proj-rel-title"
-              className="input"
-              required
-              minLength={2}
-              disabled={!!pendingProject}
-              value={releaseTitle}
-              onChange={(e) => setReleaseTitle(e.target.value)}
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="proj-desc">Description</label>
-            <textarea
-              id="proj-desc"
-              className="textarea"
-              disabled={!!pendingProject}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Goals and boundaries, in a few lines."
-            />
-          </div>
 
           {(sourceKind === "github_public" || sourceKind === "github_private") && (
             <div className="field">
@@ -245,7 +193,7 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
           )}
 
           {sourceKind === "github_private" && (
-            <div className="panel-inset stack">
+            <div className="section-block">
               {ghKeys.length > 0 && (
                 <div className="field">
                   <label htmlFor="proj-gh-key">Stored GitHub token</label>
@@ -274,9 +222,9 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
                     autoComplete="off"
                     value={inlineGhPat}
                     onChange={(e) => setInlineGhPat(e.target.value)}
-                    placeholder="github_pat_… with read-only Contents"
+                    placeholder="github_pat_... with read-only Contents"
                   />
-                  <span className="hint">It is sealed in your vault before the clone starts.</span>
+                  <span className="hint">Sealed in your vault before the read-only clone runs.</span>
                 </div>
               )}
               {storedPatKeyId && !githubKeyId && <span className="badge badge-emerald">Token sealed in your vault</span>}
@@ -284,7 +232,7 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
           )}
 
           {sourceKind === "upload" && (
-            <div className="panel-inset stack">
+            <div className="section-block">
               <div className="field">
                 <label htmlFor="proj-archive">Source archive</label>
                 <input
@@ -294,7 +242,7 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
                   accept=".zip,.tar.gz,.tgz"
                   onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                 />
-                <span className="hint">Quarantined, checked for archive bombs and symlinks, secrets redacted.</span>
+                <span className="hint">Quarantined, checked for symlinks and zip bombs, and redacted of secrets.</span>
               </div>
               {uploadFile && (
                 <span className={`badge tabular ${uploadFile.size > MAX_UPLOAD_BYTES ? "badge-danger" : "badge-neutral"}`}>
@@ -304,10 +252,63 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
             </div>
           )}
 
+          <div className="field">
+            <label htmlFor="proj-name">Project name</label>
+            <input
+              id="proj-name"
+              className="input"
+              required
+              minLength={2}
+              disabled={!!pendingProject}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Payments settlement core"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="proj-desc">Description</label>
+            <textarea
+              id="proj-desc"
+              className="textarea"
+              disabled={!!pendingProject}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Goals, main boundaries, and who uses the system."
+            />
+          </div>
+
+          <div className="grid-2">
+            <div className="field">
+              <label htmlFor="proj-rel-title">First release title</label>
+              <input
+                id="proj-rel-title"
+                className="input"
+                required
+                minLength={2}
+                disabled={!!pendingProject}
+                value={releaseTitle}
+                onChange={(e) => setReleaseTitle(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="proj-ver">Starting version</label>
+              <input
+                id="proj-ver"
+                className="input tabular mono"
+                required
+                disabled={!!pendingProject}
+                pattern="^v?\d+\.\d+\.\d+$"
+                value={releaseVersion}
+                onChange={(e) => setReleaseVersion(e.target.value)}
+              />
+            </div>
+          </div>
+
           {pendingProject && (
             <div className="notice notice-warn">
-              The project “{pendingProject.name}” exists, but its archive was not stored. Choose another archive and
-              retry, or close to keep the project without source.
+              The project "{pendingProject.name}" exists, but its archive did not upload. Pick another file to retry, or
+              close to keep the project without source.
             </div>
           )}
           {error && (
@@ -321,7 +322,7 @@ export function CreateProjectModal({ csrfToken, vaultKeys, onClose, onCreated }:
               {pendingProject ? "Close without source" : "Cancel"}
             </button>
             <button type="submit" className="btn btn-primary" disabled={busy}>
-              {busy ? "Creating…" : pendingProject ? "Retry upload" : "Create project"}
+              {busy ? "Creating project..." : pendingProject ? "Retry upload" : "Create project"}
             </button>
           </div>
         </form>
