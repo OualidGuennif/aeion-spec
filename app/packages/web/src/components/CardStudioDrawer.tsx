@@ -270,12 +270,14 @@ export function CardStudioDrawer({
   const unverifiedAssumptions = card.assumptions.filter((a) => a.status === "unverified").length;
   const review = card.latestReview;
 
+  const blockingFindings = openFindings.filter((f) => f.severity === "BLOCKER" || f.severity === "MAJOR").length;
+  const blockingDecisions = openDecisions.filter((d) => d.blocking).length;
+  const openSwarmItems = openFindings.length + blockingDecisions;
+
   const blockersToReview: string[] = [];
   if (card.goldfishRound === 0) {
     blockersToReview.push("Run at least one Goldfish round");
   } else {
-    const blockingFindings = openFindings.filter((f) => f.severity === "BLOCKER" || f.severity === "MAJOR").length;
-    const blockingDecisions = openDecisions.filter((d) => d.blocking).length;
     if (blockingFindings > 0) {
       blockersToReview.push(`resolve ${blockingFindings} blocker or major challenge${blockingFindings === 1 ? "" : "s"}`);
     }
@@ -288,7 +290,7 @@ export function CardStudioDrawer({
   }
 
   const tabs: Array<{ id: StudioTab; label: string }> = [
-    { id: "interview", label: openFindings.length > 0 ? `Interview (${openFindings.length})` : "Interview" },
+    { id: "interview", label: openSwarmItems > 0 ? `Interview (${openSwarmItems})` : "Interview" },
     { id: "review", label: card.reviewPassed ? "Review ✓" : "Review" },
     { id: "spec", label: "Spec" },
     { id: "axiom", label: "Gates" },
@@ -300,7 +302,9 @@ export function CardStudioDrawer({
       ? "Swarm: not started"
       : card.goldfishSatisfied
         ? "Swarm: satisfied"
-        : `Swarm: ${openFindings.length} open item${openFindings.length === 1 ? "" : "s"}`;
+        : openSwarmItems > 0
+          ? `Swarm: ${openSwarmItems} open item${openSwarmItems === 1 ? "" : "s"}`
+          : "Swarm: needs another round";
 
   const ownerStatusClass = card.userSatisfied ? "is-ok" : card.goldfishRound === 0 ? "" : "is-open";
   const ownerStatusText = card.userSatisfied

@@ -428,7 +428,7 @@ export function ReleaseBoard({
             </div>
           </div>
         </div>
-      ) : visibleCards.length === 0 ? (
+      ) : cards.length === 0 && stageFilter === "all" ? null : visibleCards.length === 0 ? (
         <div className="empty-state stack">
           <p>No features in {STAGES.find((s) => s.id === stageFilter)?.short ?? "this stage"} right now.</p>
           <div>

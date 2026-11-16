@@ -239,6 +239,7 @@ export default function HomePage() {
   const loadTableau = useCallback(async (projectId: string, csrf: string) => {
     const data = await unwrap(createApiClient(csrf).api.projects({ projectId }).tableau.get());
     setActiveProject(data.project);
+    setProjects((prev) => prev.map((p) => (p.id === data.project.id ? data.project : p)));
     setActiveRelease(data.release);
     setCards(data.cards);
     setArchivedCards(data.archivedCards);

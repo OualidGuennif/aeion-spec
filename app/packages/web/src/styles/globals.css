@@ -2121,27 +2121,6 @@ textarea {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .backdrop,
-  .modal-box,
-  .studio-drawer {
-    animation: fade-in 100ms ease-out;
-  }
-
-  .spinner {
-    animation: none;
-    border-color: currentColor;
-  }
-
-  .btn:active:not(:disabled) {
-    transform: none;
-  }
-
-  .archive-shelf summary::before {
-    transition: none;
-  }
-}
-
 /* ---------- Touch targets ---------- */
 
 @media (max-width: 760px), (pointer: coarse) {
@@ -2155,7 +2134,9 @@ textarea {
   .nav-select-btn,
   .user-chip-btn,
   .project-menu-item,
-  .pipeline-tab {
+  .pipeline-tab,
+  .mixer-controls .select,
+  .mixer-controls .input {
     min-height: 44px;
   }
 
@@ -2324,8 +2305,50 @@ textarea {
 
   .input,
   .select,
-  .textarea {
+  .textarea,
+  .mixer-controls .select,
+  .mixer-controls .input {
     font-size: 16px;
+  }
+
+  /* Stack AxiomSpec gate matrix into readable rows on tablets and phones. */
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table tr {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .data-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .data-table td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
   }
 }
 
@@ -2391,44 +2414,25 @@ textarea {
   .modal-actions .btn {
     flex: 1;
   }
+}
 
-  /* Stack AxiomSpec gate matrix into readable rows on phones. */
-  .data-table thead {
-    display: none;
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .modal-box,
+  .studio-drawer {
+    animation: fade-in 100ms ease-out;
   }
 
-  .data-table,
-  .data-table tbody,
-  .data-table tr,
-  .data-table td {
-    display: block;
-    width: 100%;
+  .spinner {
+    animation: none;
+    border-color: currentColor;
   }
 
-  .data-table tr {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-subtle);
+  .btn:active:not(:disabled) {
+    transform: none;
   }
 
-  .data-table tr:last-child {
-    border-bottom: 0;
-  }
-
-  .data-table td {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 4px 0;
-    border-bottom: 0;
-  }
-
-  .data-table td::before {
-    content: attr(data-label);
-    flex: none;
-    color: var(--text-tertiary);
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
+  .archive-shelf summary::before {
+    transition: none;
   }
 }
