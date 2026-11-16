@@ -9,6 +9,7 @@ import {
   GOLDFISH_PERSONAS,
   inferVendorFamily,
   PROVIDER_CATALOG,
+  resolveEnabledOpenCodeModel,
   type AgentRoleId,
   type AutomatedReviewReport,
   type GoldfishFinding,
@@ -20,6 +21,7 @@ import {
 } from "@aeion-spec/shared";
 import { StoreRepository, type StoredUserRecord } from "../db/repository.ts";
 import {
+  discoverOpenCodeGoModels,
   ensureLoopbackRelayServer,
   registerRelayRun,
   releaseRelayRun,
@@ -144,16 +146,43 @@ interface FlueRunOptions {
   onEvent?: (evt: Record<string, unknown>) => void;
 }
 
+// Strips the Flue CLI startup banner so the upstream LiteLLM error tail stays readable.
+export function formatFlueFailure(
+  role: string,
+  exitCode: number,
+  stderr: string,
+  stdout: string,
+): string {
+  const combined = (stderr || stdout).trim();
+  const markerIdx = Math.max(
+    combined.indexOf("OperationFailedError"),
+    combined.indexOf("APIError:"),
+  );
+  const detail =
+    markerIdx !== -1
+      ? combined.slice(markerIdx, markerIdx + 500)
+      : combined.slice(-500);
+  return `Flue agent (${role}) failed (${exitCode}): ${detail}`;
+}
+
 export async function invokeFlueAgent(
   opts: FlueRunOptions,
 ): Promise<{ text: string; submissions: Record<string, unknown>; modelLabel: string }> {
   const relayPort = ensureLoopbackRelayServer();
+  const enabledOpenCode =
+    opts.assignment.provider === "opencode-go"
+      ? await discoverOpenCodeGoModels(opts.ctx)
+      : null;
+  const effectiveModelId =
+    enabledOpenCode && opts.assignment.provider === "opencode-go"
+      ? resolveEnabledOpenCodeModel(opts.role, opts.assignment.modelId, enabledOpenCode)
+      : opts.assignment.modelId;
   const run = registerRelayRun({
     userId: opts.userId,
     projectId: opts.projectId,
     role: opts.role,
     provider: opts.assignment.provider,
-    modelId: opts.assignment.modelId,
+    modelId: effectiveModelId,
     ctx: opts.ctx,
     submissionsValidator: (name, payload) => checkSubmission(opts.schemas ?? {}, name, payload),
   });
@@ -176,8 +205,8 @@ export async function invokeFlueAgent(
   // Use OpenAI completions wire format across LiteLLM so all 7 providers share streaming + tool schemas uniformly
   const modelJson = JSON.stringify({
     provider: opts.assignment.provider,
-    id: opts.assignment.modelId,
-    name: `${opts.assignment.provider}/${opts.assignment.modelId}`,
+    id: effectiveModelId,
+    name: `${opts.assignment.provider}/${effectiveModelId}`,
     api: "openai-completions",
     context: 200000,
     input: 0,
@@ -237,9 +266,7 @@ export async function invokeFlueAgent(
       proc.exited,
     ]);
     if (exitCode !== 0 && run.submissions.size === 0) {
-      throw new Error(
-        `Flue agent (${opts.role}) failed (${exitCode}): ${stderr.slice(0, 400) || stdout.slice(0, 400)}`,
-      );
+      throw new Error(formatFlueFailure(opts.role, exitCode, stderr, stdout));
     }
     let text = stdout.trim();
     try {
@@ -251,7 +278,7 @@ export async function invokeFlueAgent(
     return {
       text,
       submissions: Object.fromEntries(run.submissions.entries()),
-      modelLabel: formatLitellmModelId(opts.assignment.provider, opts.assignment.modelId),
+      modelLabel: formatLitellmModelId(opts.assignment.provider, effectiveModelId),
     };
   } finally {
     if (watcherTimer) clearInterval(watcherTimer);

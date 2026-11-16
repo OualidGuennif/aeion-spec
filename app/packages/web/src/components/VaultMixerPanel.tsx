@@ -57,15 +57,40 @@ function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+function presetsForProvider(
+  provider: LlmProviderId,
+  enabledOpenCodeModels?: readonly string[],
+) {
+  const base = PROVIDER_CATALOG[provider].curatedModels;
+  if (provider !== "opencode-go" || !enabledOpenCodeModels || enabledOpenCodeModels.length === 0) {
+    return base;
+  }
+  const allowed = new Set(enabledOpenCodeModels);
+  const filtered = base.filter((m) => allowed.has(m.id));
+  const extra = enabledOpenCodeModels
+    .filter((id) => !base.some((m) => m.id === id))
+    .map((id) => ({
+      id,
+      label: `${id} (OpenCode Go)`,
+      api: "openai-completions" as const,
+      contextWindow: 128_000,
+      recommendedFor: ["goldfish"] as const,
+    }));
+  const combined = [...filtered, ...extra];
+  return combined.length > 0 ? combined : base;
+}
+
 function MixerRow({
   role,
   row,
   heldProviders,
+  enabledOpenCodeModels,
   onUpdate,
 }: {
   role: { id: AgentRoleId; label: string; note: string };
   row: DraftRow | undefined;
   heldProviders: Set<string>;
+  enabledOpenCodeModels?: readonly string[];
   onUpdate: (role: AgentRoleId, patch: Partial<DraftRow>) => void;
 }) {
   if (!row) {
@@ -78,7 +103,7 @@ function MixerRow({
       </li>
     );
   }
-  const presets = PROVIDER_CATALOG[row.provider].curatedModels;
+  const presets = presetsForProvider(row.provider, enabledOpenCodeModels);
   const isPreset = presets.some((m) => m.id === row.modelId);
   return (
     <li className="mixer-row">
@@ -215,7 +240,7 @@ export function VaultMixerPanel({
       const merged = { ...current, ...patch };
       // Pick the provider's first curated model immediately so switching providers never leaves an empty model ID.
       if (patch.provider && !patch.modelId) {
-        merged.modelId = PROVIDER_CATALOG[patch.provider].curatedModels[0]?.id ?? merged.modelId;
+        merged.modelId = presetsForProvider(patch.provider, mixer?.enabledOpenCodeModels)[0]?.id ?? merged.modelId;
       }
       return { ...prev, [role]: merged };
     });
@@ -415,6 +440,7 @@ export function VaultMixerPanel({
                   role={role}
                   row={rows[role.id]}
                   heldProviders={heldProviders}
+                  enabledOpenCodeModels={mixer?.enabledOpenCodeModels}
                   onUpdate={updateRow}
                 />
               ))}
@@ -444,6 +470,7 @@ export function VaultMixerPanel({
                   role={role}
                   row={rows[role.id]}
                   heldProviders={heldProviders}
+                  enabledOpenCodeModels={mixer?.enabledOpenCodeModels}
                   onUpdate={updateRow}
                 />
               ))}

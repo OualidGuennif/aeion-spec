@@ -5,6 +5,8 @@ import type { Database } from "bun:sqlite";
 import {
   GOLDFISH_PERSONAS,
   inferVendorFamily,
+  resolveEnabledOpenCodeModel,
+  resolveWireApi,
   type AgentRoleId,
   type AutomatedReviewReport,
   type GoldfishFinding,
@@ -54,8 +56,28 @@ export function computeMixerConfig(
   db: Database,
   userId: string,
   projectId: string,
+  enabledOpenCodeModels?: readonly string[] | null,
 ): ModelMixerConfig {
   const raw = StoreRepository.getMixer(db, projectId);
+  if (enabledOpenCodeModels && enabledOpenCodeModels.length > 0) {
+    let healed = false;
+    for (const role of ALL_AGENT_ROLES) {
+      const assigned = raw[role];
+      if (!assigned || assigned.provider !== "opencode-go") continue;
+      const resolvedModel = resolveEnabledOpenCodeModel(role, assigned.modelId, enabledOpenCodeModels);
+      if (resolvedModel !== assigned.modelId) {
+        raw[role] = {
+          ...assigned,
+          modelId: resolvedModel,
+          api: resolveWireApi("opencode-go", resolvedModel),
+        };
+        healed = true;
+      }
+    }
+    if (healed) {
+      StoreRepository.saveMixer(db, projectId, raw);
+    }
+  }
   const drafter = resolveAssignment(raw, "drafter");
   const reviewer = resolveAssignment(raw, "reviewer");
   const drafterFamily = inferVendorFamily(drafter.provider, drafter.modelId);
@@ -90,7 +112,25 @@ export function computeMixerConfig(
   }
 
   const effectiveAssignments = Object.fromEntries(
-    ALL_AGENT_ROLES.map((role) => [role, resolveAssignment(raw, role)]),
+    ALL_AGENT_ROLES.map((role) => {
+      const resolved = resolveAssignment(raw, role);
+      if (
+        enabledOpenCodeModels &&
+        enabledOpenCodeModels.length > 0 &&
+        resolved.provider === "opencode-go"
+      ) {
+        const enabledId = resolveEnabledOpenCodeModel(role, resolved.modelId, enabledOpenCodeModels);
+        return [
+          role,
+          {
+            ...resolved,
+            modelId: enabledId,
+            api: resolveWireApi("opencode-go", enabledId),
+          },
+        ];
+      }
+      return [role, resolved];
+    }),
   ) as Record<AgentRoleId, ModelAssignment>;
 
   return {
@@ -99,6 +139,9 @@ export function computeMixerConfig(
     effectiveAssignments,
     crossFamilyEnforced,
     warnings,
+    ...(enabledOpenCodeModels && enabledOpenCodeModels.length > 0
+      ? { enabledOpenCodeModels: [...enabledOpenCodeModels] }
+      : {}),
   };
 }
 

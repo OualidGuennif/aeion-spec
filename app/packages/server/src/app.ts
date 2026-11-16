@@ -58,6 +58,7 @@ import {
   readBoundedUploadBytes,
   readSandboxSlice,
 } from "./openshell/service.ts";
+import { discoverOpenCodeGoModels } from "./relay/context-relay.ts";
 import { MissingVaultCredentialError } from "./relay/flue-runner.ts";
 import {
   computeMixerConfig,
@@ -460,18 +461,19 @@ export const app = new Elysia({ name: "aeion-spec-api" })
     return slice;
   })
   // Model Mixer per Project (per role & individual Goldfish persona)
-  .get("/api/projects/:projectId/mixer", ({ request, params, set }) => {
+  .get("/api/projects/:projectId/mixer", async ({ request, params, set }) => {
     const ctx = requireAuthContext(request.headers);
     const project = StoreRepository.getProject(ctx.db, ctx.user.id, params.projectId);
     if (!project) {
       set.status = 404;
       return { error: "Project not found." };
     }
-    return computeMixerConfig(ctx.db, ctx.user.id, project.id);
+    const enabledOpenCode = await discoverOpenCodeGoModels(ctx);
+    return computeMixerConfig(ctx.db, ctx.user.id, project.id, enabledOpenCode);
   })
   .put(
     "/api/projects/:projectId/mixer",
-    ({ request, params, body, set }) => {
+    async ({ request, params, body, set }) => {
       const ctx = requireAuthContext(request.headers, { requireCsrf: true });
       const project = StoreRepository.getProject(ctx.db, ctx.user.id, params.projectId);
       if (!project) {
@@ -491,12 +493,13 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         };
       }
       StoreRepository.saveMixer(ctx.db, project.id, next);
-      return computeMixerConfig(ctx.db, ctx.user.id, project.id);
+      const enabledOpenCode = await discoverOpenCodeGoModels(ctx);
+      return computeMixerConfig(ctx.db, ctx.user.id, project.id, enabledOpenCode);
     },
     { body: SaveModelMixerSchema },
   )
   // Jira-Like Tableau & Cards
-  .get("/api/projects/:projectId/tableau", ({ request, params, set }) => {
+  .get("/api/projects/:projectId/tableau", async ({ request, params, set }) => {
     const ctx = requireAuthContext(request.headers);
     const project = StoreRepository.getProject(ctx.db, ctx.user.id, params.projectId);
     if (!project) {
@@ -508,7 +511,8 @@ export const app = new Elysia({ name: "aeion-spec-api" })
     const cards = releaseCards.filter((c) => c.column !== "archived");
     const archivedCards = releaseCards.filter((c) => c.column === "archived");
     const releases = StoreRepository.listReleases(ctx.db, project.id);
-    const mixer = computeMixerConfig(ctx.db, ctx.user.id, project.id);
+    const enabledOpenCode = await discoverOpenCodeGoModels(ctx);
+    const mixer = computeMixerConfig(ctx.db, ctx.user.id, project.id, enabledOpenCode);
     return { project, release, cards, archivedCards, releases, mixer };
   })
   .post(
