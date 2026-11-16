@@ -1,7 +1,7 @@
 // Spec: knowledge/components/spec-studio.md
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ModelMixerConfig,
   ProjectRecord,
@@ -19,12 +19,12 @@ import { ThemeSwitch } from "../components/ThemeSwitch.tsx";
 import { VaultMixerPanel } from "../components/VaultMixerPanel.tsx";
 import { createApiClient, unwrap } from "../lib/api.ts";
 
-type AppTab = "tableau" | "vault" | "releases";
+type AppTab = "tableau" | "releases" | "vault";
 
 const TABS: Array<{ id: AppTab; label: string }> = [
-  { id: "tableau", label: "Board" },
-  { id: "vault", label: "Keys & models" },
+  { id: "tableau", label: "Workspace" },
   { id: "releases", label: "Releases" },
+  { id: "vault", label: "Keys" },
 ];
 
 function errorText(err: unknown, fallback: string): string {
@@ -34,9 +34,173 @@ function errorText(err: unknown, fallback: string): string {
 function Brand() {
   return (
     <span className="brand-mark">
-      <span className="brand-dot" aria-hidden="true" />
+      <svg className="brand-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect width="24" height="24" rx="6" fill="var(--btn-primary-bg)" />
+        <rect x="5.5" y="6" width="7.5" height="12" rx="1.5" fill="var(--btn-primary-text)" />
+        <rect x="15" y="6" width="3.5" height="5.5" rx="1.2" fill="var(--btn-primary-text)" fillOpacity="0.82" />
+        <rect x="15" y="13" width="3.5" height="5" rx="1.2" fill="var(--btn-primary-text)" fillOpacity="0.52" />
+      </svg>
       <span>Æion Spec</span>
     </span>
+  );
+}
+
+function ProjectMenu({
+  projects,
+  selectedId,
+  onSelect,
+  onNewProject,
+}: {
+  projects: ProjectRecord[];
+  selectedId: string | null;
+  onSelect: (projectId: string) => void;
+  onNewProject: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = projects.find((p) => p.id === selectedId) ?? projects[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (!current) {
+    return (
+      <button type="button" className="btn btn-sm" onClick={onNewProject}>
+        + New project
+      </button>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="project-menu">
+      <button
+        type="button"
+        className="nav-select-btn"
+        aria-label="Switch or create project"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="nav-select-label">
+          {current.name} · v{current.activeReleaseVersion}
+        </span>
+        <svg className="nav-select-chevron" width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+          <path d="M1 1.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="popover-menu" role="menu" aria-label="Projects">
+          <ul className="project-menu-list">
+            {projects.map((p) => {
+              const active = p.id === current.id;
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    className={`project-menu-item ${active ? "active" : ""}`}
+                    onClick={() => {
+                      setOpen(false);
+                      onSelect(p.id);
+                    }}
+                  >
+                    <span className="project-menu-name">{p.name}</span>
+                    <span className="mono tabular project-menu-ver">v{p.activeReleaseVersion}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="menu-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="project-menu-item is-action"
+            onClick={() => {
+              setOpen(false);
+              onNewProject();
+            }}
+          >
+            + New project
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionMenu({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const isGuest = user.mode === "invite";
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="session-menu">
+      <button
+        type="button"
+        className={`user-chip-btn ${isGuest ? "is-guest" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={isGuest ? "Guest session (memory only)" : (user.email ?? undefined)}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="user-chip-dot" aria-hidden="true" />
+        <span>{isGuest ? "Guest" : user.displayName || user.email}</span>
+        <svg className="nav-select-chevron" width="10" height="7" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+          <path d="M1 1.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="popover-menu popover-menu-right" role="menu" aria-label="Session">
+          <p className="hint">
+            {isGuest
+              ? "Guest session: projects, keys, and interviews stay in memory and disappear when you leave or end this session."
+              : user.email || user.displayName}
+          </p>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn btn-sm btn-block"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+          >
+            {isGuest ? "End and erase session" : "Sign out"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -59,6 +223,7 @@ export default function HomePage() {
   const [mixer, setMixer] = useState<ModelMixerConfig | null>(null);
 
   const [selectedCard, setSelectedCard] = useState<TableauCard | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<"interview" | "review" | "spec" | "axiom">("interview");
   const [showCreateProject, setShowCreateProject] = useState(false);
 
   const clearWorkspace = useCallback(() => {
@@ -82,7 +247,7 @@ export default function HomePage() {
     setSelectedCard((prev) => (prev ? (data.cards.find((c) => c.id === prev.id) ?? null) : null));
   }, []);
 
-  // The workspace loads before the user is set, so a failed load leaves the sign-in screen with its error.
+  // Load workspace data before setting user so startup errors remain visible on the sign-in screen.
   const bootstrapSession = useCallback(
     async (sessionUser: SessionUser, plainBuilderToken?: string) => {
       const client = createApiClient(sessionUser.csrfToken);
@@ -112,7 +277,7 @@ export default function HomePage() {
           await bootstrapSession(data.user);
         }
       } catch (err) {
-        if (mounted) setAppError(errorText(err, "The saved session could not be restored."));
+        if (mounted) setAppError(errorText(err, "Your saved session could not be restored."));
       } finally {
         if (mounted) setBooting(false);
       }
@@ -127,7 +292,7 @@ export default function HomePage() {
     try {
       await loadTableau(activeProject.id, user.csrfToken);
     } catch (err) {
-      setAppError(errorText(err, "The board could not be refreshed."));
+      setAppError(errorText(err, "The workspace could not be refreshed."));
     }
   }, [user, activeProject, loadTableau]);
 
@@ -156,6 +321,13 @@ export default function HomePage() {
     }
   };
 
+  const openCard = (card: TableauCard, tab: "interview" | "review" | "spec" | "axiom" = "interview") => {
+    setDrawerInitialTab(tab);
+    setSelectedCard(card);
+  };
+
+  const llmKeyCount = vaultKeys.filter((k) => k.purpose === "llm_provider").length;
+
   if (booting) {
     return (
       <div className="app-shell">
@@ -167,7 +339,7 @@ export default function HomePage() {
         <main className="main-content">
           <div className="boot-state" role="status">
             <span className="spinner" aria-hidden="true" />
-            Opening your workspace…
+            Opening your workspace...
           </div>
         </main>
       </div>
@@ -178,7 +350,17 @@ export default function HomePage() {
     <div className="app-shell">
       <header className="topbar">
         <div className={`topbar-inner ${user ? "has-user" : ""}`}>
-          <Brand />
+          <div className="topbar-left">
+            <Brand />
+            {user && (
+              <ProjectMenu
+                projects={projects}
+                selectedId={selectedProjectId}
+                onSelect={(id) => void selectProject(id)}
+                onNewProject={() => setShowCreateProject(true)}
+              />
+            )}
+          </div>
 
           {user && (
             <nav className="segmented nav-tabs" aria-label="Workspace sections">
@@ -197,51 +379,11 @@ export default function HomePage() {
           )}
 
           <div className="topbar-right">
-            {user && (
-              <>
-                {projects.length > 0 && (
-                  <select
-                    aria-label="Active project"
-                    className="nav-select"
-                    value={selectedProjectId ?? ""}
-                    onChange={(e) => void selectProject(e.target.value)}
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} · v{p.activeReleaseVersion}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <button
-                  type="button"
-                  aria-label="New project"
-                  className="btn btn-primary btn-sm topbar-new"
-                  onClick={() => setShowCreateProject(true)}
-                >
-                  New<span className="label-extra"> project</span>
-                </button>
-                <span
-                  className={`user-chip ${user.mode === "invite" ? "is-guest" : ""}`}
-                  title={user.mode === "invite" ? "Guest session: memory only" : (user.email ?? undefined)}
-                >
-                  {user.mode === "invite" ? "Guest" : user.displayName || user.email}
-                </span>
-                <button type="button" className="btn btn-ghost btn-sm topbar-exit" onClick={() => void logout()}>
-                  {user.mode === "invite" ? "End and erase" : "Sign out"}
-                </button>
-              </>
-            )}
             <ThemeSwitch />
+            {user && <SessionMenu user={user} onLogout={() => void logout()} />}
           </div>
         </div>
       </header>
-
-      {user?.mode === "invite" && (
-        <div className="guest-ribbon" role="note">
-          Guest session: projects, keys and interviews live in memory only and are erased when you end it.
-        </div>
-      )}
 
       <main className="main-content">
         {appError && (
@@ -266,25 +408,34 @@ export default function HomePage() {
                   release={activeRelease}
                   cards={cards}
                   archivedCards={archivedCards}
+                  llmKeyCount={llmKeyCount}
+                  onOpenKeys={() => setActiveTab("vault")}
                   onRefresh={refresh}
-                  onSelectCard={setSelectedCard}
+                  onSelectCard={openCard}
                 />
               ) : (
                 <section className="welcome">
-                  <span className="eyebrow">
-                    {user.mode === "invite" || !user.displayName ? "Welcome" : `Welcome, ${user.displayName}`}
-                  </span>
-                  <h1>Start your first spec</h1>
+                  <h1>
+                    {user.mode === "invite" || !user.displayName
+                      ? "Create your first project"
+                      : `Welcome, ${user.displayName}`}
+                  </h1>
                   <p className="lead">
-                    Begin from a blank page, a GitHub repository or an archive of your code. The source stays
-                    read-only in a quarantined sandbox.
+                    Start from an empty board, a GitHub repository, or an uploaded archive. Your source stays read-only
+                    inside an isolated sandbox.
                   </p>
+                  {user.mode === "invite" && (
+                    <p className="hint">
+                      Guest session active: projects, keys, and interviews stay in memory only until you close or end
+                      this session.
+                    </p>
+                  )}
                   <div className="row-gap">
                     <button type="button" className="btn btn-primary" onClick={() => setShowCreateProject(true)}>
                       Create a project
                     </button>
                     <button type="button" className="btn" onClick={() => setActiveTab("vault")}>
-                      Add model keys first
+                      {llmKeyCount === 0 ? "Add API keys first" : `Keys (${llmKeyCount})`}
                     </button>
                   </div>
                 </section>
@@ -318,7 +469,7 @@ export default function HomePage() {
                 />
               ) : (
                 <div className="empty-state">
-                  <p>Create or select a project to see its releases, its Builder API access and its source.</p>
+                  <p>Create or select a project to inspect its releases, Builder API token, and quarantined source.</p>
                 </div>
               ))}
           </>
@@ -351,10 +502,11 @@ export default function HomePage() {
 
       {selectedCard && activeProject && user && (
         <CardStudioDrawer
-          key={selectedCard.id}
+          key={`${selectedCard.id}-${drawerInitialTab}`}
           csrfToken={user.csrfToken}
           projectId={activeProject.id}
           card={selectedCard}
+          initialTab={drawerInitialTab}
           onClose={() => setSelectedCard(null)}
           onCardUpdated={(updated) => {
             setSelectedCard(updated);

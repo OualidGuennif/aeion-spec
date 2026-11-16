@@ -15,6 +15,7 @@ tools/evals/results.jsonl
 work/handovers/
 /state_of_the_art research/
 CLAUDE-SECURITY-*/
+temporary_tools/
 __pycache__/
 *.pyc
 .DS_Store

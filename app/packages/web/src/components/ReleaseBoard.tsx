@@ -16,30 +16,35 @@ interface ReleaseBoardProps {
   release: ReleaseRecord;
   cards: TableauCard[];
   archivedCards: TableauCard[];
+  llmKeyCount: number;
+  onOpenKeys: () => void;
   onRefresh: () => Promise<void>;
-  onSelectCard: (card: TableauCard) => void;
+  onSelectCard: (card: TableauCard, tab?: "interview" | "review" | "spec" | "axiom") => void;
 }
 
 type BoardColumn = Exclude<TableauColumn, "archived">;
+type StageFilter = "all" | BoardColumn;
 
-const COLUMNS: Array<{ id: BoardColumn; step: number; label: string; hint: string }> = [
-  { id: "idea", step: 1, label: "Ideas", hint: "Candidate features, not yet questioned" },
+const STAGES: Array<{ id: BoardColumn; step: number; short: string; label: string; hint: string }> = [
+  { id: "idea", step: 1, short: "Ideas", label: "Step 1 · Ideas", hint: "Define scope and target files" },
   {
     id: "goldfish_interview",
     step: 2,
-    label: "Goldfish interview",
-    hint: "Elephant and a fresh swarm until both sides are satisfied",
+    short: "Interview",
+    label: "Step 2 · Interview",
+    hint: "Clarify gaps with Elephant and Goldfish",
   },
   {
     id: "automated_review",
     step: 3,
-    label: "Automated review",
-    hint: "AxiomSpec gates, cross-family reviewer, reassessment",
+    short: "Review",
+    label: "Step 3 · Review",
+    hint: "Pass AxiomSpec gates and cross-family check",
   },
-  { id: "validated", step: 4, label: "Validated", hint: "Approved and exportable through the Builder API" },
+  { id: "validated", step: 4, short: "Validated", label: "Step 4 · Validated", hint: "Ready to seal for builders" },
 ];
 
-// The next minor version is the usual step after a sealed release; the owner can change it.
+// Suggest the next minor version after a seal; the owner can change it in the dialog.
 function suggestNextVersion(current: string): string {
   const parts = current.replace(/^v/i, "").split(".").map(Number);
   if (parts.length === 3 && parts.every((n) => Number.isInteger(n) && n >= 0)) {
@@ -58,9 +63,12 @@ export function ReleaseBoard({
   release,
   cards,
   archivedCards,
+  llmKeyCount,
+  onOpenKeys,
   onRefresh,
   onSelectCard,
 }: ReleaseBoardProps) {
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
@@ -79,14 +87,12 @@ export function ReleaseBoard({
   const [releaseNotes, setReleaseNotes] = useState("");
   const [sealError, setSealError] = useState<string | null>(null);
 
-  const [dragCardId, setDragCardId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<BoardColumn | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const client = createApiClient(csrfToken);
 
-  // Escape closes the seal dialog unless a seal is in flight.
+  // Escape closes the seal dialog unless a seal request is in flight.
   useEffect(() => {
     if (!showSealModal) return;
     const onKey = (e: KeyboardEvent) => {
@@ -125,9 +131,10 @@ export function ReleaseBoard({
       setTitle("");
       setSummary("");
       setShowIdeaForm(false);
+      setStageFilter("all");
       await onRefresh();
     } catch (err) {
-      setError(errorText(err, "The idea could not be created."));
+      setError(errorText(err, "The feature could not be created."));
     } finally {
       setBusy(false);
     }
@@ -147,13 +154,17 @@ export function ReleaseBoard({
       setEditingRelease(false);
       await onRefresh();
     } catch (err) {
-      setError(errorText(err, "The release header could not be saved."));
+      setError(errorText(err, "The release details could not be saved."));
     } finally {
       setBusy(false);
     }
   };
 
-  const moveCard = async (cardId: string, targetColumn: TableauColumn) => {
+  const moveCard = async (
+    cardId: string,
+    targetColumn: TableauColumn,
+    openTab?: "interview" | "review" | "spec" | "axiom",
+  ) => {
     setError(null);
     setBusy(true);
     try {
@@ -163,11 +174,13 @@ export function ReleaseBoard({
         }),
       );
       await onRefresh();
-      if (targetColumn === "goldfish_interview" || targetColumn === "automated_review") {
-        onSelectCard(res.card);
+      if (openTab) {
+        onSelectCard(res.card, openTab);
+      } else if (targetColumn === "goldfish_interview" || targetColumn === "automated_review") {
+        onSelectCard(res.card, targetColumn === "automated_review" ? "review" : "interview");
       }
     } catch (err) {
-      setError(errorText(err, "A workflow gate blocked the move."));
+      setError(errorText(err, "A workflow gate blocked that move."));
     } finally {
       setBusy(false);
     }
@@ -198,14 +211,15 @@ export function ReleaseBoard({
 
   const validatedCount = cards.filter((c) => c.column === "validated").length;
   const sourceLabel = project.openshellSummary
-    ? `${project.sourceKind} · ${project.openshellSummary.mode}`
+    ? `${project.sourceKind} (${project.openshellSummary.mode})`
     : project.sourceKind;
+
+  const visibleCards = stageFilter === "all" ? cards : cards.filter((c) => c.column === stageFilter);
 
   return (
     <div className="stack">
-      <section className="release-bar" aria-label="Active release">
+      <header className="release-header">
         <div className="release-title-group">
-          <span className="eyebrow">{project.name}</span>
           {!editingRelease ? (
             <div className="release-headline">
               <h1>{release.title}</h1>
@@ -246,38 +260,39 @@ export function ReleaseBoard({
               </button>
             </form>
           )}
-          <div className="release-stats">
-            <div className="stat">
-              <span className="stat-value tabular">
-                {validatedCount}
-                <span className="stat-of">/{cards.length}</span>
-              </span>
-              <span className="stat-label">validated</span>
-            </div>
-            <progress
-              className="progress"
-              value={validatedCount}
-              max={Math.max(cards.length, 1)}
-              aria-label="Validated features"
-            />
-            <span className="chip">Source: {sourceLabel}</span>
+          <div className="release-meta-line">
+            <span>{project.name}</span>
+            <span>Source: {sourceLabel}</span>
+            <span className="tabular">
+              {validatedCount} of {cards.length} validated
+            </span>
           </div>
         </div>
 
         <div className="release-actions">
-          <button type="button" className="btn" onClick={() => setShowIdeaForm((s) => !s)}>
-            {showIdeaForm ? "Close idea form" : "New idea"}
+          <button type="button" className="btn btn-primary" onClick={() => setShowIdeaForm((s) => !s)}>
+            {showIdeaForm ? "Close form" : "+ New feature"}
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             disabled={validatedCount === 0 || busy}
+            title={validatedCount === 0 ? "Validate at least one feature before sealing." : undefined}
             onClick={openSealModal}
           >
             Seal release ({validatedCount})
           </button>
         </div>
-      </section>
+      </header>
+
+      {llmKeyCount === 0 && (
+        <div className="inline-tip" role="status">
+          <span>Need live AI runs? Add an API key in Keys first (skip this in mock mode).</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenKeys}>
+            Open Keys →
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="error-banner" role="alert">
@@ -292,8 +307,8 @@ export function ReleaseBoard({
         <form onSubmit={createIdea} className="panel stack">
           <div className="panel-header">
             <div>
-              <h2>New idea</h2>
-              <p className="muted">It lands in Ideas; the Goldfish interview questions it next.</p>
+              <h2>New feature</h2>
+              <p className="muted">Starts at Step 1 (Ideas), then moves into a Goldfish interview when ready.</p>
             </div>
           </div>
           <div className="grid-2">
@@ -322,7 +337,7 @@ export function ReleaseBoard({
           </div>
 
           <div className="field">
-            <label htmlFor="idea-summary">Problem and intent</label>
+            <label htmlFor="idea-summary">Problem and goal</label>
             <textarea
               id="idea-summary"
               className="textarea"
@@ -330,7 +345,7 @@ export function ReleaseBoard({
               minLength={10}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
-              placeholder="Scope, actors, non-goals and the edge cases that matter."
+              placeholder="Describe what should happen, who uses it, and which failures matter."
             />
           </div>
 
@@ -357,58 +372,82 @@ export function ReleaseBoard({
               <option value="M">Size M</option>
               <option value="L">Size L</option>
             </select>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowIdeaForm(false)}>
+              Cancel
+            </button>
             <button type="submit" className="btn btn-primary" disabled={busy}>
-              Add idea
+              {busy ? "Adding..." : "Add feature"}
             </button>
           </div>
         </form>
       )}
 
-      <div className="tableau-grid">
-        {COLUMNS.map((col) => {
-          const colCards = cards.filter((c) => c.column === col.id);
+      <nav className="pipeline-bar" aria-label="Pipeline stages">
+        <button
+          type="button"
+          className={`pipeline-tab ${stageFilter === "all" ? "active" : ""}`}
+          onClick={() => setStageFilter("all")}
+        >
+          <span>All</span>
+          <span className="count-pill tabular">{cards.length}</span>
+        </button>
+        {STAGES.map((stage) => {
+          const count = cards.filter((c) => c.column === stage.id).length;
           return (
-            <section
-              key={col.id}
-              className={`tableau-col ${dropTarget === col.id ? "is-drop" : ""}`}
-              aria-label={col.label}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (dragCardId) setDropTarget(col.id);
-              }}
-              onDragLeave={() => setDropTarget((t) => (t === col.id ? null : t))}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDropTarget(null);
-                if (dragCardId) {
-                  void moveCard(dragCardId, col.id);
-                  setDragCardId(null);
-                }
-              }}
+            <button
+              key={stage.id}
+              type="button"
+              className={`pipeline-tab ${stageFilter === stage.id ? "active" : ""}`}
+              onClick={() => setStageFilter(stage.id)}
             >
-              <header className="tableau-col-header">
-                <span className="step-dot tabular" aria-hidden="true">
-                  {col.step}
-                </span>
-                <span className="tableau-col-title">{col.label}</span>
-                <span className="count-pill tabular">{colCards.length}</span>
-              </header>
-              <p className="col-hint">{col.hint}</p>
+              <span>
+                {stage.step}. {stage.short}
+              </span>
+              <span className="count-pill tabular">{count}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-              {colCards.length === 0 && <div className="col-empty">No cards here yet</div>}
-
-              {colCards.map((card) => (
-                <article
-                  key={card.id}
-                  className="kanban-card"
-                  draggable
-                  onDragStart={() => setDragCardId(card.id)}
-                  onDragEnd={() => {
-                    setDragCardId(null);
-                    setDropTarget(null);
-                  }}
-                >
+      {cards.length === 0 && !showIdeaForm ? (
+        <div className="stack">
+          <div className="step-guide" aria-label="How the workflow runs">
+            {STAGES.map((stage) => (
+              <div key={stage.id} className="step-guide-item">
+                <strong>{stage.label}</strong>
+                <span>{stage.hint}</span>
+              </div>
+            ))}
+          </div>
+          <div className="empty-state stack">
+            <p>No features in this release yet. Add your first feature to begin Step 1.</p>
+            <div>
+              <button type="button" className="btn btn-primary" onClick={() => setShowIdeaForm(true)}>
+                + New feature
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : visibleCards.length === 0 ? (
+        <div className="empty-state stack">
+          <p>No features in {STAGES.find((s) => s.id === stageFilter)?.short ?? "this stage"} right now.</p>
+          <div>
+            <button type="button" className="btn" onClick={() => setStageFilter("all")}>
+              Show all features
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="feature-list">
+          {visibleCards.map((card) => {
+            const stage = STAGES.find((s) => s.id === card.column) ?? STAGES[0]!;
+            return (
+              <article key={card.id} className="feature-row">
+                <div className="feature-row-main">
                   <div className="card-meta-row">
+                    <span className={`badge ${card.column === "validated" ? "badge-emerald" : "badge-warm"}`}>
+                      {stage.label}
+                    </span>
                     <span className="chip mono">{card.featureCode}</span>
                     <span className="chip">{card.area}</span>
                     <span className="chip">{card.phase}</span>
@@ -424,72 +463,94 @@ export function ReleaseBoard({
                     <div className="card-flags">
                       {card.goldfishRound > 0 && (
                         <span className={`badge ${card.goldfishSatisfied ? "badge-emerald" : "badge-warn"}`}>
-                          Round {card.goldfishRound}: {card.goldfishSatisfied ? "swarm satisfied" : "open questions"}
+                          Round {card.goldfishRound}: {card.goldfishSatisfied ? "swarm satisfied" : "open items"}
                         </span>
                       )}
-                      {card.userSatisfied && <span className="badge badge-emerald">Owner satisfied</span>}
+                      {card.userSatisfied && <span className="badge badge-emerald">Owner confirmed</span>}
                       {card.reviewPassed && <span className="badge badge-emerald">Review passed</span>}
                     </div>
                   )}
+                </div>
 
-                  <div className="card-actions">
-                    <button type="button" className="btn btn-sm" onClick={() => onSelectCard(card)}>
-                      Open
+                <div className="feature-row-actions">
+                  {card.column === "idea" && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => void moveCard(card.id, "goldfish_interview", "interview")}
+                    >
+                      Start interview →
                     </button>
+                  )}
 
-                    {card.column === "idea" && (
+                  {card.column === "goldfish_interview" &&
+                    (card.goldfishSatisfied && card.userSatisfied ? (
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
                         disabled={busy}
-                        onClick={() => void moveCard(card.id, "goldfish_interview")}
+                        onClick={() => void moveCard(card.id, "automated_review", "review")}
                       >
-                        Start interview
+                        Send to review →
                       </button>
-                    )}
-
-                    {card.column === "goldfish_interview" && (
+                    ) : (
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={busy || !card.goldfishSatisfied || !card.userSatisfied}
-                        title={
-                          !card.goldfishSatisfied || !card.userSatisfied
-                            ? "Needs both the swarm and the owner to be satisfied"
-                            : undefined
-                        }
-                        onClick={() => void moveCard(card.id, "automated_review")}
+                        onClick={() => onSelectCard(card, "interview")}
                       >
-                        Run review
+                        Continue interview →
                       </button>
-                    )}
+                    ))}
 
-                    {card.column === "automated_review" && (
+                  {card.column === "automated_review" &&
+                    (card.reviewPassed ? (
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={busy || !card.reviewPassed}
+                        disabled={busy}
                         onClick={() => void moveCard(card.id, "validated")}
                       >
-                        Validate
+                        Validate →
                       </button>
-                    )}
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => onSelectCard(card, "review")}
+                      >
+                        Run review →
+                      </button>
+                    ))}
 
+                  {card.column === "validated" && (
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm card-archive"
-                      disabled={busy}
-                      onClick={() => void moveCard(card.id, "archived")}
+                      className="btn btn-primary btn-sm"
+                      onClick={() => onSelectCard(card, "spec")}
                     >
-                      Archive
+                      Inspect spec
                     </button>
-                  </div>
-                </article>
-              ))}
-            </section>
-          );
-        })}
-      </div>
+                  )}
+
+                  <button type="button" className="btn btn-sm" onClick={() => onSelectCard(card)}>
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={busy}
+                    onClick={() => void moveCard(card.id, "archived")}
+                  >
+                    Archive
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       {archivedCards.length > 0 && (
         <details className="archive-shelf">
@@ -517,17 +578,24 @@ export function ReleaseBoard({
       )}
 
       {showSealModal && (
-        <div className="backdrop-center" role="dialog" aria-modal="true" aria-labelledby="seal-title">
+        <div
+          className="backdrop-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="seal-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !busy) setShowSealModal(false);
+          }}
+        >
           <form onSubmit={sealRelease} className="modal-box">
             <div>
-              <span className="eyebrow">Seal release</span>
               <h2 id="seal-title">
-                {release.title} <span className="mono tabular">v{release.version}</span>
+                Seal {release.title} <span className="mono tabular">v{release.version}</span>
               </h2>
               <p className="muted">
-                The <strong>{validatedCount}</strong> validated features are compiled into a signed{" "}
-                <span className="mono">axiomspec/0.3</span> snapshot, moved to the release history, and the
-                board starts the next release clean.
+                This seals <strong>{validatedCount}</strong> validated feature{validatedCount === 1 ? "" : "s"} into a
+                signed <span className="mono">axiomspec/0.3</span> snapshot, archives the release, and opens a clean next
+                release sheet.
               </p>
             </div>
             <div className="grid-2">
@@ -551,7 +619,7 @@ export function ReleaseBoard({
                   value={nextVersion}
                   onChange={(e) => setNextVersion(e.target.value)}
                 />
-                <span className="hint">Must be greater than {release.version}.</span>
+                <span className="hint">Must be newer than {release.version}.</span>
               </div>
             </div>
             <div className="field">
@@ -562,7 +630,7 @@ export function ReleaseBoard({
                 maxLength={4000}
                 value={releaseNotes}
                 onChange={(e) => setReleaseNotes(e.target.value)}
-                placeholder="What this release settles, in a few lines."
+                placeholder="Summarize what this release delivers."
               />
             </div>
             {sealError && (
@@ -575,7 +643,7 @@ export function ReleaseBoard({
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? "Sealing…" : "Seal and start next release"}
+                {busy ? "Sealing..." : "Seal and start next release"}
               </button>
             </div>
           </form>

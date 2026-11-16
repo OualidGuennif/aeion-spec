@@ -16,7 +16,7 @@ import { createApiClient, unwrap } from "../lib/api.ts";
 
 interface VaultMixerPanelProps {
   csrfToken: string;
-  /** A guest vault is sealed in memory and erased at the end of the session, never written to disk. */
+  /** Guest keys stay sealed in memory and vanish when the session ends. */
   memoryOnly: boolean;
   projectId: string | null;
   vaultKeys: VaultKeySummary[];
@@ -30,12 +30,19 @@ interface DraftRow {
   modelId: string;
 }
 
-const ROLES: Array<{ id: AgentRoleId; label: string; note: string }> = [
+const CORE_ROLES: Array<{ id: AgentRoleId; label: string; note: string }> = [
   { id: "elephant", label: "Elephant", note: "Leads the interview and reads the quarantined source" },
   { id: "drafter", label: "Drafter", note: "Writes the feature spec and its AxiomSpec obligations" },
   { id: "reviewer", label: "Reviewer", note: "Independent gatekeeper from another vendor family" },
-  ...GOLDFISH_PERSONAS.map((g) => ({ id: g.roleId, label: `Goldfish · ${g.label}`, note: g.lens })),
 ];
+
+const GOLDFISH_ROLES: Array<{ id: AgentRoleId; label: string; note: string }> = GOLDFISH_PERSONAS.map((g) => ({
+  id: g.roleId,
+  label: `Goldfish · ${g.label}`,
+  note: g.lens,
+}));
+
+const ALL_ROLES = [...CORE_ROLES, ...GOLDFISH_ROLES];
 
 function providerLabel(id: LlmProviderId | "github"): string {
   return id === "github" ? "GitHub" : PROVIDER_CATALOG[id].label;
@@ -48,6 +55,77 @@ function goldfishModelFor(provider: LlmProviderId): string {
 
 function errorText(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
+}
+
+function MixerRow({
+  role,
+  row,
+  heldProviders,
+  onUpdate,
+}: {
+  role: { id: AgentRoleId; label: string; note: string };
+  row: DraftRow | undefined;
+  heldProviders: Set<string>;
+  onUpdate: (role: AgentRoleId, patch: Partial<DraftRow>) => void;
+}) {
+  if (!row) {
+    return (
+      <li className="mixer-row">
+        <div className="mixer-role">
+          <strong>{role.label}</strong>
+          <span className="muted">Not assigned yet</span>
+        </div>
+      </li>
+    );
+  }
+  const presets = PROVIDER_CATALOG[row.provider].curatedModels;
+  const isPreset = presets.some((m) => m.id === row.modelId);
+  return (
+    <li className="mixer-row">
+      <div className="mixer-role">
+        <strong>{role.label}</strong>
+        <span className="muted">{role.note}</span>
+      </div>
+      <div className="mixer-controls">
+        <select
+          aria-label={`${role.label} provider`}
+          className="select"
+          value={row.provider}
+          onChange={(e) => onUpdate(role.id, { provider: e.target.value as LlmProviderId })}
+        >
+          {ALL_PROVIDER_IDS.map((pid) => (
+            <option key={pid} value={pid}>
+              {PROVIDER_CATALOG[pid].label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={`${role.label} model`}
+          className="select"
+          value={isPreset ? row.modelId : "__custom__"}
+          onChange={(e) => {
+            if (e.target.value !== "__custom__") onUpdate(role.id, { modelId: e.target.value });
+          }}
+        >
+          {presets.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+          <option value="__custom__">Custom model ID</option>
+        </select>
+        {!isPreset && (
+          <input
+            aria-label={`${role.label} custom model ID`}
+            className="input mono"
+            value={row.modelId}
+            onChange={(e) => onUpdate(role.id, { modelId: e.target.value })}
+          />
+        )}
+        {!heldProviders.has(row.provider) && <span className="badge badge-warn">No key stored</span>}
+      </div>
+    </li>
+  );
 }
 
 export function VaultMixerPanel({
@@ -71,14 +149,12 @@ export function VaultMixerPanel({
   const [mixerBusy, setMixerBusy] = useState(false);
   const [mixerMsg, setMixerMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const heldProviders = new Set(
-    vaultKeys.filter((k) => k.purpose === "llm_provider").map((k) => k.provider),
-  );
+  const heldProviders = new Set(vaultKeys.filter((k) => k.purpose === "llm_provider").map((k) => k.provider));
 
-  // The editable rows start from what each role really runs, as resolved by the server.
+  // Seed draft rows from the server's resolved per-role assignments.
   useEffect(() => {
     const initial: Record<string, DraftRow> = {};
-    for (const role of ROLES) {
+    for (const role of ALL_ROLES) {
       const resolved = mixer?.effectiveAssignments?.[role.id] ?? mixer?.assignments[role.id];
       if (resolved) initial[role.id] = { provider: resolved.provider, modelId: resolved.modelId };
     }
@@ -137,7 +213,7 @@ export function VaultMixerPanel({
     setRows((prev) => {
       const current = prev[role] ?? { provider: "openai" as LlmProviderId, modelId: "" };
       const merged = { ...current, ...patch };
-      // A new provider starts on its first curated model so the row is never left half-valid.
+      // Pick the provider's first curated model immediately so switching providers never leaves an empty model ID.
       if (patch.provider && !patch.modelId) {
         merged.modelId = PROVIDER_CATALOG[patch.provider].curatedModels[0]?.id ?? merged.modelId;
       }
@@ -174,11 +250,10 @@ export function VaultMixerPanel({
   return (
     <div className="stack">
       <div className="page-header">
-        <span className="eyebrow">Settings</span>
         <h1>Keys and models</h1>
         <p className="muted">
-          Keys are sealed with AES-256-GCM and bound to your account. Agents never see them; the relay
-          attaches them per request.
+          Keys are encrypted with AES-256-GCM and stay inside your vault. The relay attaches them per request, so
+          agents never see raw secrets.
         </p>
       </div>
 
@@ -186,10 +261,10 @@ export function VaultMixerPanel({
         <div className="panel-header">
           <div>
             <h2 id="vault-title">Key vault</h2>
-            <p className="muted">Plaintext is never returned, only a masked hint and a fingerprint.</p>
+            <p className="muted">Only a masked hint and a fingerprint are shown after storage.</p>
           </div>
           {memoryOnly ? (
-            <span className="badge badge-warn">Sealed in memory, erased at the end</span>
+            <span className="badge badge-warn">Sealed in memory, erased at session end</span>
           ) : (
             <span className="badge badge-emerald">Sealed at rest</span>
           )}
@@ -251,12 +326,12 @@ export function VaultMixerPanel({
               minLength={6}
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
-              placeholder={provider === "github" ? "github_pat_…" : PROVIDER_CATALOG[provider].keyHint}
+              placeholder={provider === "github" ? "github_pat_..." : PROVIDER_CATALOG[provider].keyHint}
             />
           </div>
 
           <button type="submit" className="btn btn-primary vault-submit" disabled={vaultBusy}>
-            {vaultBusy ? "Sealing…" : "Seal and store"}
+            {vaultBusy ? "Sealing..." : "Seal and store"}
           </button>
         </form>
         {vaultErr && (
@@ -267,7 +342,7 @@ export function VaultMixerPanel({
 
         {vaultKeys.length === 0 ? (
           <div className="empty-state">
-            <p>No keys yet. Add one model provider key to run live agents.</p>
+            <p>No keys stored yet. Add one model provider key to run live agents.</p>
           </div>
         ) : (
           <ul className="key-list">
@@ -279,7 +354,7 @@ export function VaultMixerPanel({
                 <div className="key-main">
                   <strong>{k.label}</strong>
                   <span className="muted">
-                    {providerLabel(k.provider)} · {k.purpose === "github_readonly" ? "GitHub read-only" : "model provider"}
+                    {providerLabel(k.provider)} · {k.purpose === "github_readonly" ? "GitHub read-only" : "Model provider"}
                   </span>
                 </div>
                 <span className="mono key-hint">{k.maskedHint}</span>
@@ -316,7 +391,7 @@ export function VaultMixerPanel({
           <div className="panel-header">
             <div>
               <h2 id="mixer-title">Model mixer</h2>
-              <p className="muted">Pick the provider and model for each agent role in this project.</p>
+              <p className="muted">Choose which provider and model each agent role uses for this project.</p>
             </div>
             {mixer && (
               <span className={`badge ${mixer.crossFamilyEnforced ? "badge-emerald" : "badge-warn"}`}>
@@ -331,9 +406,24 @@ export function VaultMixerPanel({
             </div>
           ))}
 
+          <div className="stack-tight">
+            <h3>Core pipeline (3 roles)</h3>
+            <ul className="mixer-list">
+              {CORE_ROLES.map((role) => (
+                <MixerRow
+                  key={role.id}
+                  role={role}
+                  row={rows[role.id]}
+                  heldProviders={heldProviders}
+                  onUpdate={updateRow}
+                />
+              ))}
+            </ul>
+          </div>
+
           {goldfishShortcuts.length > 0 && (
             <div className="choice-row" aria-label="Goldfish shortcuts">
-              <span className="muted">All Goldfish on:</span>
+              <span className="muted">Set all 8 Goldfish reviewers to:</span>
               {goldfishShortcuts.map((pid) => (
                 <button key={pid} type="button" className="choice" onClick={() => applyAllGoldfish(pid)}>
                   {PROVIDER_CATALOG[pid].label}
@@ -342,73 +432,27 @@ export function VaultMixerPanel({
             </div>
           )}
 
-          <ul className="mixer-list">
-            {ROLES.map((role) => {
-              const row = rows[role.id];
-              if (!row) {
-                return (
-                  <li key={role.id} className="mixer-row">
-                    <div className="mixer-role">
-                      <strong>{role.label}</strong>
-                      <span className="muted">Not resolved yet</span>
-                    </div>
-                  </li>
-                );
-              }
-              const presets = PROVIDER_CATALOG[row.provider].curatedModels;
-              const isPreset = presets.some((m) => m.id === row.modelId);
-              return (
-                <li key={role.id} className="mixer-row">
-                  <div className="mixer-role">
-                    <strong>{role.label}</strong>
-                    <span className="muted">{role.note}</span>
-                  </div>
-                  <div className="mixer-controls">
-                    <select
-                      aria-label={`${role.label} provider`}
-                      className="select"
-                      value={row.provider}
-                      onChange={(e) => updateRow(role.id, { provider: e.target.value as LlmProviderId })}
-                    >
-                      {ALL_PROVIDER_IDS.map((pid) => (
-                        <option key={pid} value={pid}>
-                          {PROVIDER_CATALOG[pid].label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      aria-label={`${role.label} model`}
-                      className="select"
-                      value={isPreset ? row.modelId : "__custom__"}
-                      onChange={(e) => {
-                        if (e.target.value !== "__custom__") updateRow(role.id, { modelId: e.target.value });
-                      }}
-                    >
-                      {presets.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model id</option>
-                    </select>
-                    {!isPreset && (
-                      <input
-                        aria-label={`${role.label} custom model id`}
-                        className="input mono"
-                        value={row.modelId}
-                        onChange={(e) => updateRow(role.id, { modelId: e.target.value })}
-                      />
-                    )}
-                    {!heldProviders.has(row.provider) && <span className="badge badge-warn">No key stored</span>}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <details className="subtle-disclosure">
+            <summary>
+              <span>Goldfish swarm ({GOLDFISH_ROLES.length} personas)</span>
+              <span className="hint">Expand to tune individual reviewers</span>
+            </summary>
+            <ul className="mixer-list">
+              {GOLDFISH_ROLES.map((role) => (
+                <MixerRow
+                  key={role.id}
+                  role={role}
+                  row={rows[role.id]}
+                  heldProviders={heldProviders}
+                  onUpdate={updateRow}
+                />
+              ))}
+            </ul>
+          </details>
 
           <div className="row-gap">
             <button type="button" className="btn btn-primary" disabled={mixerBusy} onClick={() => void saveMixer()}>
-              {mixerBusy ? "Saving…" : "Save mix"}
+              {mixerBusy ? "Saving..." : "Save mix"}
             </button>
             {mixerMsg && (
               <span className={`badge ${mixerMsg.ok ? "badge-emerald" : "badge-danger"}`} role="status">
@@ -419,7 +463,7 @@ export function VaultMixerPanel({
         </section>
       ) : (
         <div className="empty-state">
-          <p>Create or select a project to choose its models.</p>
+          <p>Create or select a project to assign models to its agent roles.</p>
         </div>
       )}
     </div>

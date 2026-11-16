@@ -6,15 +6,15 @@ import "../styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Æion Spec",
-  description: "Zero-trust specification studio: Goldfish interview, AxiomSpec gates, sealed releases.",
+  description: "Specification studio with Goldfish interviews, AxiomSpec gates, and sealed releases.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#eef3fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#070b16" },
+    { media: "(prefers-color-scheme: light)", color: "#faf9f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0d" },
   ],
 };
 

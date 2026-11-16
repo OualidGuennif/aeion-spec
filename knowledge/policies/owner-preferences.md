@@ -60,9 +60,14 @@ under its heading: `- <preference> (<source>, YYYY-MM-DD)`.
 
 ## UI
 
-- The Æion Spec web UI follows PayPal (ink and confident blue), Apple (frosted glass) and Skyscanner
-  (friendly chips, swipeable lanes): "super clean and cozy". Glass wins over the UI policy's sober
-  default for this app; contrast, reduced motion and reduced transparency still apply (chat, 2026-11-16)
+- The Æion Spec web UI follows an ultra-sober OpenAI black-and-white palette with a subtle Anthropic warm
+  paper and clay touch plus midnight blue links and focus rings (replacing the earlier PayPal blue and
+  frosted aurora look); AA contrast, reduced motion, and reduced transparency still apply (chat, 2026-11-16)
+- Keep navigation and workflow minimal so the next action stays obvious: a 3-tab shell (`Workspace`,
+  `Releases`, `Keys`) with project creation inside the project menu and a guided 4-step feature pipeline
+  instead of empty Kanban boxes (chat, 2026-11-16)
+- Keep `temporary_tools/` gitignored, apply `impeccable` UI/UX craft inside Æion Spec's existing visual
+  taste, and follow `humanizer` prose rules for docs, comments, and user-facing copy (chat, 2026-11-16)
 
 ## Checkable, no hook yet
 
