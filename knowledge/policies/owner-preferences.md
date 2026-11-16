@@ -54,7 +54,9 @@ under its heading: `- <preference> (<source>, YYYY-MM-DD)`.
 
 ## UI
 
-- (none yet)
+- The Æion Spec web UI follows PayPal (ink and confident blue), Apple (frosted glass) and Skyscanner
+  (friendly chips, swipeable lanes): "super clean and cozy". Glass wins over the UI policy's sober
+  default for this app; contrast, reduced motion and reduced transparency still apply (chat, 2026-11-16)
 
 ## Checkable, no hook yet
 

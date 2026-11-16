@@ -3,10 +3,10 @@
   "profile": "AX-CORE-0.1",
   "project": {
     "id": "PROJECT-001",
-    "name": "Æion Core",
+    "name": "Æion Spec",
     "owner": "ACTOR-001",
     "mode": "product",
-    "description": "A local web application that takes a feature from brainstorm to an AxiomSpec specification and the feature file aeion-observability builds, with cited documentation."
+    "description": "Zero-trust specification and adversarial Goldfish workbench built with Bun + Elysia + Eden + Next.js, Flue + Pi behind LiteLLM, and OpenShell, compiling AxiomSpec 0.3 contracts and aeion-observability exports."
   },
   "actors": [
     {
@@ -26,7 +26,7 @@
     {
       "id": "SRC-001",
       "type": "user_input",
-      "locator": "owner request, 2026-11-09/10: aeion-core webapp (brainstorm, spec studio, docs) on Flue agents",
+      "locator": "owner request, 2026-11-09..15: aeion-spec workbench on Bun + Elysia + Next.js with Flue/LiteLLM and OpenShell",
       "capture_sha256": null,
       "review_state": "reviewed"
     }
@@ -1690,7 +1690,7 @@
       ],
       "data": {
         "responsibility": "Serves the page and the JSON API, stores sessions and features, renders Markdown safely.",
-        "boundary": "app/aeion server, store, config and markdown; loopback only"
+        "boundary": "app/packages/server/src/{app,auth,db,vault}; SQLite & volatile Invite Mode"
       }
     },
     {
@@ -1706,7 +1706,7 @@
       ],
       "data": {
         "responsibility": "Launches one Flue agent per task, relays its model calls with the key and validates its submissions.",
-        "boundary": "app/aeion/agents.py and app/flue; the key never leaves the server process"
+        "boundary": "app/packages/server/src/relay & app/packages/flue; plaintext keys stay in vault"
       }
     },
     {
@@ -1722,7 +1722,7 @@
       ],
       "data": {
         "responsibility": "Runs the Elephant conversation, the Goldfish reviews, drafting and resolution.",
-        "boundary": "app/aeion brainstorm, design and goldfish"
+        "boundary": "app/packages/server/src/tableau/orchestrator.ts & Elephant-Goldfish Flue agents"
       }
     },
     {
@@ -1738,7 +1738,7 @@
       ],
       "data": {
         "responsibility": "Merges checked fragments into the product spec, runs the interview and exports approved features.",
-        "boundary": "app/aeion/specstudio.py; reads aeion-observability, never writes it"
+        "boundary": "app/packages/web & app/packages/server/src/{axiom,observability}; reads targets in OpenShell, never mutates them"
       }
     },
     {
@@ -1754,7 +1754,7 @@
       ],
       "data": {
         "responsibility": "Indexes every document, serves pages with diagrams and runs the librarian's tools.",
-        "boundary": "app/aeion/docshub.py; configured roots only"
+        "boundary": "tools/axiom/graph.py, query.py, docs.py & Next.js Studio views; configured roots only"
       }
     },
     {
@@ -1772,7 +1772,7 @@
         "definition": "One flue run of one role agent: one message, one input file, a disposable conversation.",
         "aliases": [],
         "unit": null,
-        "context": "aeion-core"
+        "context": "aeion-spec"
       }
     },
     {
@@ -1790,7 +1790,7 @@
         "definition": "A typed result an agent passes to a submit tool; stored only after its schema and checks.",
         "aliases": [],
         "unit": null,
-        "context": "aeion-core"
+        "context": "aeion-spec"
       }
     },
     {
@@ -2841,143 +2841,143 @@
       "id": "BIND-001",
       "kind": "test",
       "node_id": "TEST-001",
-      "path": "app/tests/test_agents.py",
-      "symbol": "FlueRunTests.test_each_input_reaches_the_model_once_and_the_submission_is_validated",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-002",
       "kind": "test",
       "node_id": "TEST-002",
-      "path": "app/tests/test_agents.py",
-      "symbol": "GatewayTests.test_relay_adds_the_key_and_provider_headers_and_meters_usage",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-003",
       "kind": "test",
       "node_id": "TEST-003",
-      "path": "app/tests/test_agents.py",
-      "symbol": "GatewayTests.test_unknown_token_and_other_model_are_refused_before_the_upstream",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-004",
       "kind": "test",
       "node_id": "TEST-004",
-      "path": "app/tests/test_agents.py",
-      "symbol": "GatewayTests.test_the_key_never_appears_in_a_refusal",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-005",
       "kind": "test",
       "node_id": "TEST-005",
-      "path": "app/tests/test_agents.py",
-      "symbol": "SubmitTests.test_schema_refusal_names_the_field_and_records_nothing",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-006",
       "kind": "test",
       "node_id": "TEST-006",
-      "path": "app/tests/test_agents.py",
-      "symbol": "SubmitTests.test_clean_value_is_accepted_and_ends_the_turn",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-007",
       "kind": "test",
       "node_id": "TEST-007",
-      "path": "app/tests/test_agents.py",
-      "symbol": "SubmitTests.test_failing_checks_are_returned_until_the_attempts_run_out",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-008",
       "kind": "test",
       "node_id": "TEST-008",
-      "path": "app/tests/test_sections.py",
-      "symbol": "BrainstormTests.test_first_turn_sends_the_idea_once_and_the_tool_anchors_the_hypothesis",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-009",
       "kind": "test",
       "node_id": "TEST-009",
-      "path": "app/tests/test_sections.py",
-      "symbol": "BrainstormTests.test_review_runs_seven_fresh_goldfish_then_the_brief",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-010",
       "kind": "test",
       "node_id": "TEST-010",
-      "path": "app/tests/test_sections.py",
-      "symbol": "GoldfishTests.test_a_reviewer_that_fails_twice_is_not_run",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-011",
       "kind": "test",
       "node_id": "TEST-011",
-      "path": "app/tests/test_sections.py",
-      "symbol": "DesignTests.test_resolution_refuses_an_edit_that_does_not_apply_once",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-012",
       "kind": "test",
       "node_id": "TEST-012",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_draft_merges_normalized_requirements_and_leaves_decisions_to_the_owner",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-013",
       "kind": "test",
       "node_id": "TEST-013",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_patch_may_relink_a_test_but_never_answer_a_decision",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-014",
       "kind": "test",
       "node_id": "TEST-014",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_approval_is_refused_while_a_blocking_decision_is_open",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-015",
       "kind": "test",
       "node_id": "TEST-015",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_answers_then_approval_write_an_export_the_build_factory_accepts",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-016",
       "kind": "test",
       "node_id": "TEST-016",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_failed_gates_go_back_to_the_analyst_by_local_key",
+      "path": "app/tests/test_platform_python.py",
+      "symbol": "PlatformPythonTests.test_axiom03_engine_validates_strict_spec_and_rejects_broken_release_bump",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -2985,71 +2985,71 @@
       "id": "BIND-017",
       "kind": "test",
       "node_id": "TEST-017",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_write_paths_follow_the_build_factory_scope_rules",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-018",
       "kind": "test",
       "node_id": "TEST-018",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_an_amendment_fixes_one_item_and_is_checked_as_a_whole",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-019",
       "kind": "test",
       "node_id": "TEST-019",
-      "path": "app/tests/test_sections.py",
-      "symbol": "DocsTests.test_the_answer_cites_only_numbered_evidence",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-020",
       "kind": "test",
       "node_id": "TEST-020",
-      "path": "app/tests/test_sections.py",
-      "symbol": "DocsTests.test_section_text_stops_at_the_next_heading_of_the_same_level",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-021",
       "kind": "test",
       "node_id": "TEST-021",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_a_foreign_host_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-022",
       "kind": "test",
       "node_id": "TEST-022",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_a_write_without_the_custom_header_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-023",
       "kind": "test",
       "node_id": "TEST-023",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_the_page_carries_a_strict_content_security_policy",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-024",
       "kind": "test",
       "node_id": "TEST-024",
-      "path": "app/tests/test_engine.py",
-      "symbol": "StoreTests.test_names_that_could_leave_the_workspace_are_refused",
+      "path": "app/tests/test_platform_python.py",
+      "symbol": "PlatformPythonTests.test_quarantine_blocks_traversal_and_symlinks_and_scrubs_secrets",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3057,125 +3057,125 @@
       "id": "BIND-025",
       "kind": "test",
       "node_id": "TEST-025",
-      "path": "app/tests/test_engine.py",
-      "symbol": "StoreTests.test_a_saved_feature_reads_back_with_its_metadata",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-026",
       "kind": "test",
       "node_id": "TEST-026",
-      "path": "app/tests/test_engine.py",
-      "symbol": "MarkdownTests.test_html_is_escaped_and_unsafe_links_are_dropped",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-027",
       "kind": "test",
       "node_id": "TEST-027",
-      "path": "app/tests/test_engine.py",
-      "symbol": "MarkdownTests.test_a_rewritten_link_is_checked_before_rewriting",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-028",
       "kind": "test",
       "node_id": "TEST-028",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_status_reports_readiness_without_secrets",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-029",
       "kind": "test",
       "node_id": "TEST-029",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_an_unknown_session_is_not_found",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-030",
       "kind": "test",
       "node_id": "TEST-030",
-      "path": "app/tests/test_sections.py",
-      "symbol": "BrainstormTests.test_review_needs_a_hypothesis",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-031",
       "kind": "test",
       "node_id": "TEST-031",
-      "path": "app/tests/test_agents.py",
-      "symbol": "SubmitTests.test_an_undeclared_tool_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-032",
       "kind": "test",
       "node_id": "TEST-032",
-      "path": "app/tests/test_agents.py",
-      "symbol": "GatewayTests.test_bridge_runs_a_registered_tool_and_reports_refusals",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-033",
       "kind": "test",
       "node_id": "TEST-033",
-      "path": "app/tests/test_sections.py",
-      "symbol": "GoldfishTests.test_review_input_numbers_the_range_and_names_the_standard_once",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-034",
       "kind": "test",
       "node_id": "TEST-035",
-      "path": "app/tests/test_agents.py",
-      "symbol": "SubmitTests.test_a_block_that_repeats_the_message_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-035",
       "kind": "test",
       "node_id": "TEST-036",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_a_patch_that_still_fails_its_checks_is_not_applied",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-036",
       "kind": "test",
       "node_id": "TEST-046",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_a_checked_patch_is_applied_and_saved",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-037",
       "kind": "test",
       "node_id": "TEST-037",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_a_save_that_would_break_the_specification_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-038",
       "kind": "test",
       "node_id": "TEST-038",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_gates_that_did_not_run_are_unknown",
+      "path": "app/tests/test_platform_python.py",
+      "symbol": "PlatformPythonTests.test_axiom03_engine_validates_strict_spec_and_rejects_broken_release_bump",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3183,143 +3183,143 @@
       "id": "BIND-039",
       "kind": "test",
       "node_id": "TEST-039",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_approval_is_refused_while_the_build_factory_catalog_cannot_be_read",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-040",
       "kind": "test",
       "node_id": "TEST-040",
-      "path": "app/tests/test_sections.py",
-      "symbol": "StudioTests.test_an_export_loads_in_the_build_factorys_own_catalog",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-041",
       "kind": "test",
       "node_id": "TEST-041",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ConfigTests.test_the_server_refuses_a_host_off_loopback",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-042",
       "kind": "test",
       "node_id": "TEST-047",
-      "path": "app/tests/test_engine.py",
-      "symbol": "BindTests.test_every_accepted_loopback_host_binds_and_answers",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-043",
       "kind": "test",
       "node_id": "TEST-042",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_a_peer_on_another_machine_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-044",
       "kind": "test",
       "node_id": "TEST-043",
-      "path": "app/tests/test_engine.py",
-      "symbol": "ServerTests.test_a_body_length_that_is_not_a_bounded_number_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-045",
       "kind": "test",
       "node_id": "TEST-044",
-      "path": "app/tests/test_agents.py",
-      "symbol": "GatewayTests.test_a_body_length_that_is_not_a_bounded_number_is_refused",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-046",
       "kind": "test",
       "node_id": "TEST-045",
-      "path": "app/tests/test_engine.py",
-      "symbol": "KeyTests.test_no_response_carries_the_key",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-047",
       "kind": "test",
       "node_id": "TEST-034",
-      "path": "app/tests/test_sections.py",
-      "symbol": "DesignTests.test_ask_owner_turns_the_section_into_a_question",
-      "language": "python",
+      "path": "app/packages/server/test/platform.test.ts",
+      "symbol": null,
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-048",
       "kind": "code",
       "node_id": "COMP-001",
-      "path": "app/aeion/server.py",
-      "symbol": "Handler",
-      "language": "python",
+      "path": "app/packages/server/src/app.ts",
+      "symbol": "mapErrorStatus",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-049",
       "kind": "code",
       "node_id": "COMP-001",
-      "path": "app/aeion/store.py",
-      "symbol": "Store.path",
-      "language": "python",
+      "path": "app/packages/server/src/db/repository.ts",
+      "symbol": "StoreRepository.createPersistentSession",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-050",
       "kind": "code",
       "node_id": "COMP-001",
-      "path": "app/aeion/markdown.py",
-      "symbol": "render",
-      "language": "python",
+      "path": "app/packages/server/src/vault/crypto.ts",
+      "symbol": "sealSecret",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-051",
       "kind": "code",
       "node_id": "COMP-001",
-      "path": "app/aeion/config.py",
-      "symbol": "loopback",
-      "language": "python",
+      "path": "app/packages/server/src/auth/service.ts",
+      "symbol": "requireAuthContext",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-052",
       "kind": "code",
       "node_id": "COMP-002",
-      "path": "app/aeion/agents.py",
-      "symbol": "Agents.run",
-      "language": "python",
+      "path": "app/packages/server/src/relay/flue-runner.ts",
+      "symbol": "invokeFlueAgent",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-053",
       "kind": "code",
       "node_id": "COMP-002",
-      "path": "app/aeion/agents.py",
-      "symbol": "Gateway.forward",
-      "language": "python",
+      "path": "app/packages/server/src/relay/context-relay.ts",
+      "symbol": "handleRelayToolCall",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-054",
       "kind": "code",
       "node_id": "COMP-002",
-      "path": "app/aeion/agents.py",
-      "symbol": "Run.call",
+      "path": "app/packages/server/src/relay/litellm_bridge.py",
+      "symbol": "chat_completions",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3327,80 +3327,80 @@
       "id": "BIND-055",
       "kind": "code",
       "node_id": "COMP-002",
-      "path": "app/aeion/agents.py",
-      "symbol": "content_length",
-      "language": "python",
+      "path": "app/packages/flue/src/provider.ts",
+      "symbol": "modelFromEnv",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-056",
       "kind": "code",
       "node_id": "COMP-003",
-      "path": "app/aeion/brainstorm.py",
-      "symbol": "turn",
-      "language": "python",
+      "path": "app/packages/server/src/tableau/orchestrator.ts",
+      "symbol": "startOrContinueInterview",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-057",
       "kind": "code",
       "node_id": "COMP-003",
-      "path": "app/aeion/goldfish/__init__.py",
-      "symbol": "run",
-      "language": "python",
+      "path": "app/packages/flue/src/agents/goldfish.ts",
+      "symbol": "Goldfish",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-058",
       "kind": "code",
       "node_id": "COMP-003",
-      "path": "app/aeion/design.py",
-      "symbol": "resolve",
-      "language": "python",
+      "path": "app/packages/server/src/tableau/orchestrator.ts",
+      "symbol": "transitionTableauCard",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-059",
       "kind": "code",
       "node_id": "COMP-004",
-      "path": "app/aeion/specstudio.py",
-      "symbol": "draft",
-      "language": "python",
+      "path": "app/packages/server/src/observability/exporter.ts",
+      "symbol": "buildFeatureMarkdown",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-060",
       "kind": "code",
       "node_id": "COMP-004",
-      "path": "app/aeion/specstudio.py",
-      "symbol": "approve",
-      "language": "python",
+      "path": "app/packages/server/src/observability/exporter.ts",
+      "symbol": "validateObservabilityMarkdown",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-061",
       "kind": "code",
       "node_id": "COMP-004",
-      "path": "app/aeion/specstudio.py",
-      "symbol": "export_issues",
-      "language": "python",
+      "path": "app/packages/server/src/observability/exporter.ts",
+      "symbol": "buildObservabilityBundle",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-062",
       "kind": "code",
       "node_id": "COMP-004",
-      "path": "app/aeion/specstudio.py",
-      "symbol": "change",
-      "language": "python",
+      "path": "app/packages/server/src/axiom/compiler.ts",
+      "symbol": "buildAxiom03Document",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     },
     {
       "id": "BIND-063",
       "kind": "code",
       "node_id": "COMP-004",
-      "path": "app/aeion/specstudio.py",
-      "symbol": "_save_spec",
+      "path": "app/axiom03/engine.py",
+      "symbol": "handle_validate_spec",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3408,8 +3408,8 @@
       "id": "BIND-064",
       "kind": "code",
       "node_id": "COMP-005",
-      "path": "app/aeion/docshub.py",
-      "symbol": "Corpus.search",
+      "path": "tools/axiom/graph.py",
+      "symbol": "snapshot",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3417,8 +3417,8 @@
       "id": "BIND-065",
       "kind": "code",
       "node_id": "COMP-005",
-      "path": "app/aeion/docshub.py",
-      "symbol": "Assistant.ask",
+      "path": "tools/axiom/query.py",
+      "symbol": "run",
       "language": "python",
       "expected_resolution": "must_resolve"
     },
@@ -3426,9 +3426,9 @@
       "id": "BIND-066",
       "kind": "code",
       "node_id": "COMP-005",
-      "path": "app/aeion/docshub.py",
-      "symbol": "section_text",
-      "language": "python",
+      "path": "app/packages/web/src/lib/api.ts",
+      "symbol": "createApiClient",
+      "language": "typescript",
       "expected_resolution": "must_resolve"
     }
   ],

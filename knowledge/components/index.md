@@ -18,8 +18,8 @@ Start from [the template](_template.md).
 | [Integration choices](context-and-architecture.md) | stable | scoped upstream adoption and runtime qualification boundaries |
 | [Æion Factory architecture](factory-architecture.md) | stable | complete spec; its diagrams are in the [cockpit](../../docs/README.md) |
 | [Axiom toolkit](axiom-toolkit.md) | stable | `tools/axiom/axiom`: AxiomSpec gates, knowledge graph, queries, packets, views, cockpit, export, evidence |
-| [aeion-core engine](aeion-engine.md) | stable | `app/aeion`: server, store, settings, safe Markdown, the page |
-| [Flue agents](aeion-agents.md) | stable | `app/flue` and `app/aeion/agents.py`: twelve role agents, gateway, skills, tools |
-| [Brainstorm and design](goldfish.md) | stable | the Elephant-Goldfish Model: brainstorm, drafting, five review stages |
-| [Spec studio](spec-studio.md) | stable | AxiomSpec drafting with gates, the owner's interview, export for aeion-observability |
-| [Documentation hub](docs-hub.md) | stable | tree, search, pages with diagrams, the cited librarian |
+| [aeion-spec engine](aeion-engine.md) | stable | `app/packages/server`: Elysia API, SQLite store, Vault, ContextRelay, Axiom03 bridge |
+| [Flue agents](aeion-agents.md) | stable | `app/packages/flue` & `app/packages/shared`: Pi + Flue agents, LiteLLM routing, tools, skills |
+| [Brainstorm and design](goldfish.md) | stable | Elephant-Goldfish Model tableau orchestration, isolated fresh reviews, dual satisfaction |
+| [Spec studio](spec-studio.md) | stable | Next.js Atelier UI, AxiomSpec 0.3 G01-G14 checks, Observability export, release sealing |
+| [Documentation hub](docs-hub.md) | stable | AxiomSpec knowledge graph, generated cockpit diagrams, and Studio reference views |

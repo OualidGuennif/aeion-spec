@@ -1,76 +1,87 @@
 ---
 type: Component
 title: "Spec studio"
-description: "Section 2: a feature document becomes one goal of a product's AxiomSpec specification, checked by the template's gates, completed through an interview with the owner, and exported as the eight-section feature file aeion-observability builds."
+description: "Next.js + Eden Treaty workbench with a glass light/dark UI, AxiomSpec 0.3 G01-G14 compilation, 8-section aeion-observability feature export, cumulative release sealing, and historical archives."
 status: stable
 sources:
-  - resource: ../../app/aeion/specstudio.py
-    title: "Drafting, checks, interview, patches, approval, export"
-  - resource: ../../app/aeion/profiles/aeion-observability.json
+  - resource: ../../app/packages/web/src/app/layout.tsx
+    title: "Next.js root layout, viewport colours and the theme set before first paint"
+  - resource: ../../app/packages/web/src/app/page.tsx
+    title: "Main Release Tableau, Mixer, Archive, and Card Drawer workspace"
+  - resource: ../../app/packages/web/src/components/
+    title: "AuthGate, ReleaseBoard, CardStudioDrawer, VaultMixerPanel, CreateProjectModal, ReleasesArchive, ThemeSwitch"
+  - resource: ../../app/packages/web/src/styles/
+    title: "Glass design tokens (light and dark, AA-checked pairs) and the one shared stylesheet"
+  - resource: ../../app/packages/web/src/lib/api.ts
+    title: "Type-safe Eden Treaty client for Elysia API"
+  - resource: ../../app/packages/server/src/observability/exporter.ts
+    title: "8-section feature markdown compiler and Observability manifest builder"
+  - resource: ../../app/packages/server/profiles/aeion-observability.json
     title: "Export profile (frontmatter and section texts)"
-  - resource: ../../app/aeion/profiles/aeion-observability-target.json
+  - resource: ../../app/packages/server/profiles/aeion-observability-target.json
     title: "Build-factory rules (areas, phases, scopes, delivery steps)"
   - resource: ../../tools/axiom/spec.py
     title: "The template's gates"
   - resource: ../../tools/axiom/docs.py
     title: "Feature export and product documentation"
-  - resource: ../../app/tests/test_sections.py
-    title: "Studio tests"
+  - resource: ../../app/packages/server/test/platform.test.ts
+    title: "Studio export, Axiom03 compilation, and release sealing tests"
 ---
 
 # Spec studio
 
 ## Intent
 
-Turn an agreed feature into a contract a build factory can implement and verify without asking anyone.
-Deterministic gates decide whether it is ready; the owner decides what only the owner can.
+Turn an agreed release into contracts a build factory (`aeion-observability` or standalone builders via
+`/api/v1/builder/*`) can implement and verify autonomously, inside a calm light/dark web UI: PayPal's ink
+and confident blue, Apple's frosted glass layers, Skyscanner's friendly chips and swipeable lanes (the
+owner's request of 2026-11-16). Deterministic AxiomSpec `0.3` and Observability checks decide readiness;
+only the owner resolves design decisions and seals releases.
 
 ## Data sources
 
-The saved feature document; the product's `knowledge/spec/spec.json` in the workspace; the build
-factory's catalog `demo/forum/features/MANIFEST.json` and `demo/forum/ARCHITECTURE.md` in
-aeion-observability, read only, to choose the next free ID, check dependencies and bind the
-architecture digest.
+Validated feature cards across active and sealed releases, settled `DEC-*` answers, project Model Mixer
+assignments, OpenShell root digests, and the export/target profiles in `app/packages/server/profiles/`.
 
 ## Inputs
 
-The analyst agent's fragment (goal, terms, requirements, decisions, assumptions, tests, components,
-export fields); the owner's answers, one question at a time; export settings; discussion and changes.
+Interactive Release Tableau moves (drag and drop or buttons), archiving a card and restoring it to Ideas,
+SSE interview turns, `DEC-*` decision settlements (answering one also confirms the unverified assumptions
+the drawer lists), manual finding resolutions, Model Mixer provider and model per role (temperature and
+thinking level are not offered: they do not reach the agents), and sealing with optional release notes.
 
 ## Outputs
 
-Draft nodes and typed edges in the product specification; on approval, the nodes become active and
-`exports/<id>-<slug>.md` plus its `.manifest-row.json` are written in the product folder; the product's
-pages and diagrams regenerate.
+Cumulative `axiomspec/0.3` specifications (`previous` chained to the prior sealed release digest),
+validated 8-section Observability Markdown exports (`<= 12,000 B`) with `MANIFEST.json` bundles, cleaned
+active boards, and immutable release history entries.
 
 ## Invariants
 
-- Code assigns IDs and edges; a fragment's local keys never become IDs.
-- Every fragment and patch is merged into a scratch copy and checked before it is accepted. A patch
-  that still fails when its attempts run out is not applied; a field value outside the AxiomSpec
-  schema is never stored. A draft that still fails is saved as draft records with its failures shown.
-- Nothing is saved that `axiom check` would refuse (strict JSON, schema, references, BCIR) and the
-  stored specification did not already hold: such a save is refused and the file is unchanged.
-- When the schema check fails, the other gates did not run and are reported `unknown`, never `pass`.
-- Approval is refused while aeion-observability's catalog cannot be read: the feature's ID, its
-  dependencies and the architecture digest come from it.
-- No agent answers a decision or validates an assumption; only the owner's answer does.
-- The export is refused unless the design gates pass, every blocking question is answered, the file is
-  at most 12,000 bytes, carries acceptance checks, has the eight sections and follows the build
-  factory's scope rules (literal paths under its product roots, no hidden or parent components).
-- aeion-core never writes into aeion-observability.
+- Nothing seals that fails AxiomSpec `0.3` gates `G01-G14` or Observability constraints (`max_bytes <= 12,000`,
+  all 8 canonical sections present, valid `write_paths`, delivery step bounds).
+- Sealed releases are cumulative across prior sealed versions even after active boards clear validated cards.
+- Every UI mutation uses Eden Treaty with CSRF headers (`X-Aeion: 1`, `X-CSRF-Token`).
+- `aeion-spec` never writes into `aeion-observability` or user source repositories.
+- Colours live only in `styles/tokens.css`; every glass surface falls back to a solid one without
+  `backdrop-filter` or under `prefers-reduced-transparency`, and motion stops under `prefers-reduced-motion`.
+- The stored theme (`aeion-theme`: light, night, auto) is applied before first paint, so no flash.
+- A failed request shows its error where the action was taken (the seal error inside its dialog, the
+  workspace error in a banner); none is swallowed. An interview stream that ends without `complete` is an error.
+- A guest vault reads "sealed in memory", never "sealed at rest"; archived cards open read-only.
+- At 760 px and below the lanes become a swipeable row and the top bar scrolls away instead of staying pinned.
 
 ## Determinism
 
-The same specification and export settings always produce the same feature file and manifest row.
+For identical cards, decisions, and OpenShell digests, `compiler.ts` and `exporter.ts` produce deterministic
+node IDs, YAML frontmatter, markdown bytes, and SHA-256 release digests.
 
 ## Acceptance checks
 
-- [ ] An approved feature's file loads in aeion-observability's own catalog loader with its contract
-  current (`StudioTests.test_an_export_loads_in_the_build_factorys_own_catalog`, run when
-  `AEION_OBSERVABILITY` or `../aeion-observability` holds a checkout).
-- [ ] A blocking decision keeps the feature out of `ready`.
+- [ ] `bun --cwd packages/web build` compiles cleanly with zero TypeScript errors.
+- [ ] Release sealing across multiple releases passes Axiom03 G14 diff checks and serves via Builder Bearer API.
+- [ ] Sign-in, board, drawer, keys and releases checked by eye at 375 px and 1440 px, light and dark.
 
 ## Out of scope
 
-Implementing the feature, which is aeion-observability's work.
+Mutating target codebases directly; implementation belongs to downstream builder agents reading `/api/v1/builder/*`.

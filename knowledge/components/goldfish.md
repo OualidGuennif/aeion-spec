@@ -1,67 +1,74 @@
 ---
 type: Component
 title: "Brainstorm and design (Elephant-Goldfish Model)"
-description: "Section 1: the Elephant brainstorms with the owner, seven Goldfish review the anchored hypothesis, the synthesizer writes the concepts brief; design documents are drafted section by section and reviewed in five stages."
+description: "Jira-like Tableau orchestration: Elephant interrogates feature cards while 8 fresh isolated Goldfish personas challenge independently until dual satisfaction permits Automated Review."
 status: stable
 sources:
-  - resource: ../../app/aeion/brainstorm.py
-    title: "Brainstorm flow"
-  - resource: ../../app/aeion/design.py
-    title: "Drafting, staged review, resolution"
-  - resource: ../../app/aeion/goldfish/__init__.py
-    title: "Reviewers, stages, presets, findings"
-  - resource: ../../app/aeion/goldfish/upstream/NOTICE.md
+  - resource: ../../app/packages/server/src/tableau/orchestrator.ts
+    title: "Tableau state transitions, Elephant-Goldfish rounds, satisfaction evaluation, and Stage 5-9 reassessment"
+  - resource: ../../app/packages/flue/upstream/NOTICE.md
     title: "Vendored Elephant-Goldfish Model (Apache-2.0)"
-  - resource: ../../app/tests/test_sections.py
-    title: "Section tests"
+  - resource: ../../app/packages/flue/src/agents/elephant.ts
+    title: "Elephant interview agent"
+  - resource: ../../app/packages/flue/src/agents/goldfish.ts
+    title: "Fresh zero-history Goldfish reviewer agent"
+  - resource: ../../app/packages/flue/src/agents/reviewer.ts
+    title: "Cross-family Automated Reviewer agent"
+  - resource: ../../app/packages/server/test/platform.test.ts
+    title: "Dual-satisfaction and workflow transition tests"
 ---
 
 # Brainstorm and design
 
 ## Intent
 
-Bring the [Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model) into a web page
-as a guided menu: the Elephant holds the conversation and stress-tests the idea; each Goldfish is a fresh
-agent that sees only the document, so its critique is not anchored by the conversation.
+Embed the [Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model) directly into
+a Jira-style Release Tableau (`Idea` → `Goldfish Interview` → `Automated Review` → `Validated`): the
+Elephant holds conversation context and probes ambiguities against the project source in OpenShell, while
+eight fresh zero-history Goldfish personas (`pm`, `security`, `sre`, `ux`, `architecture`, `finops`,
+`legal`, `devil`) evaluate only the generated feature specification without anchor bias.
 
 ## Data sources
 
-The vendored upstream (personas, document standards, skills) in `app/aeion/goldfish/upstream`, pinned
-to the commit named in its `NOTICE.md`; the owner's messages; saved feature documents.
+The vendored upstream personas and skills in `app/packages/flue/upstream` and `app/packages/flue/src/skills/`,
+owner interview messages, `DEC-*` answers, and read-only OpenShell slices.
 
 ## Inputs
 
-- Brainstorm: an idea, then one owner message per turn. The readiness gate opens when the Elephant
-  anchors a hypothesis with its tool; the owner then chooses a Goldfish review or more clarification.
-- Design: a saved brief or notes; four sections (Overview & Goals, Technical Plan, Alternatives
-  Considered, Detailed Implementation Plan), each approved by the owner.
-- Review: a saved document and a preset: interactive (stages 5-9 with a gate after each),
-  consolidated, feature spec only (5-8) or implementation plan only (9).
+- Moving a card from `idea` to `goldfish_interview`, or posting an interview turn / SSE stream turn with
+  clarifications, settled `DEC-*` answers, and optional manual finding resolutions (`PATCH /cards/:cardId`).
+- Moving to `automated_review` (requires both `goldfishSatisfied` and `userSatisfied`), followed by move
+  to `validated`.
 
 ## Outputs
 
-The concepts brief, saved as a feature document; design documents; per-stage reports with
-deduplicated findings; resolutions in four categories (CONTEST, ESCALATE, PROPOSE FIX, DECLINE).
+Deduplicated Goldfish findings (`BLOCKER`/`MAJOR`/`NIT`), extracted `DEC-*` owner questions, updated
+`draftMarkdown` specs, and cross-family Automated Review + Stage 5-9 reassessment reports.
 
 ## Invariants
 
-- A Goldfish receives its persona, the mode, the standard when one applies and the document, never the
-  conversation (test_sections).
-- A reviewer that fails twice is reported as "not run", never as zero findings.
-- A proposed edit is applied only when its exact text occurs once in the document; the resolver is told
-  and corrects it otherwise (test_sections).
-- A stage is re-audited at most once after the owner's edits.
+- Each Goldfish call receives only the current specification and its persona lens, never conversation history.
+- Every finding carries stable `GF-*` identity; owner clarifications and explicit resolutions mark prior
+  matching findings resolved while re-evaluating remaining `BLOCKER` status before transition to review.
+  A resolved finding that a later round raises again reopens.
+- Answering a `DEC-*` decision also confirms the card's unverified assumptions; the drawer says so next to
+  the decisions.
+- A reassessment lens that fails blocks the review instead of passing it; a failed review puts the card
+  back in the column it came from.
+- An archived card can only be restored to `idea`.
+- Transition to `validated` requires `reviewPassed === true` (zero unresolved blockers across Stage 5-9,
+  cross-family reviewer approval, AxiomSpec 0.3 G01-G14 pass, and Observability export validity).
 
 ## Determinism
 
-Stage order, reviewer sets, standards, line ranges and report layout are fixed in code; only the
-reviewers' text varies.
+Column state transitions, `evaluateSatisfaction()`, and Axiom/Observability gate checks are deterministic;
+only agent critique text varies in live mode.
 
 ## Acceptance checks
 
-- [ ] A brainstorm reaches an anchored hypothesis, a seven-reviewer brief and a saved feature.
-- [ ] A review stage reports findings with their reviewers and line references.
+- [ ] A card cannot advance to `automated_review` until both Goldfish (0 open blockers) and Owner confirm satisfaction.
+- [ ] A live Goldfish + cross-family Claude Haiku review run completes cleanly via Flue + LiteLLM.
 
 ## Out of scope
 
-Editing the upstream personas or standards in place; they are vendored verbatim.
+Editing upstream Google personas in place or letting Goldfish read conversational history.

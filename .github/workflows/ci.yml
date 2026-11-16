@@ -31,17 +31,30 @@ jobs:
         run: ./tools/efficiency/bundle && git diff --exit-code efficiency/efficiency-bundle.md
 
   app-tests:
-    name: Application tests (Python, with the Flue harness)
+    name: Application tests (Bun + Elysia + Next.js + Python OpenShell/Axiom03)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: '22'
-      - name: Install the pinned agent harness (no install scripts)
-        working-directory: app/flue
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: python3 -m unittest discover -s app/tests -v
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.4"
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      # Exact pins, the versions the local suite passes with: an unpinned install takes whatever the index serves.
+      - name: Set up Python .venv for OpenShell, Axiom03, and LiteLLM tests
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir fastapi==0.163.1 uvicorn==0.54.0 litellm==1.109.1 jsonschema==4.26.0 cryptography==50.0.2
+      - name: Install JS workspace packages and build Next.js UI
+        working-directory: app
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun --cwd packages/web build
+      - name: Run Bun server unit/integration tests
+        working-directory: app
+        run: bun test packages/server/test
+      - name: Run Python OpenShell & Axiom03 contract tests
+        run: .venv/bin/python -m unittest discover -s app/tests -v
 
   secret-scan:
     runs-on: ubuntu-latest

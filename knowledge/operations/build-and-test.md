@@ -59,7 +59,7 @@ it and fails when the committed bundle differs.
 | Connector copies | `tools/agents/adapter-check` (`--root` for a project that adopted the factory) | the root |
 | Efficiency bundle | `tools/efficiency/bundle`, then `git diff --exit-code efficiency/efficiency-bundle.md` | the root |
 | Spec, graph and cockpit | `tools/axiom/axiom check` (structure, references, dangling IDs, generated docs current); `tools/axiom/axiom validate` for design readiness | the root; Python 3 only |
-| Your code | add your build, lint and test commands here, copied from CI | |
+| Application (CI job `app-tests`) | `bun install --frozen-lockfile && bun run typecheck && bun --cwd packages/web build`, then `bun test packages/server/test`; Python contracts with `.venv/bin/python -m unittest discover -s app/tests` | `app/` for the Bun steps, the root for Python; Bun 1.4.4 and a `.venv` with exact pins: fastapi 0.163.1, uvicorn 0.54.0, litellm 1.109.1, jsonschema 4.26.0, cryptography 50.0.2 |
 
 `stale` and `orphans` reject a missing root or `knowledge/` directory with a nonzero exit;
 `orphans` also requires `knowledge/index.md`. An absent tree is not a successful empty check.

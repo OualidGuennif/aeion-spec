@@ -1,56 +1,55 @@
 ---
 type: Component
 title: "Documentation hub"
-description: "Section 3: every document in one tree with search, pages with the diagrams that concern them, and the librarian agent that answers from the pages and the AxiomSpec graphs with checked citations."
+description: "Knowledge graph indexing, deterministic cockpit generation (`docs/`), and integrated release/spec inspection inside the Next.js workbench."
 status: stable
 sources:
-  - resource: ../../app/aeion/docshub.py
-    title: "Corpus, search, pages, assistant tools"
   - resource: ../../tools/axiom/graph.py
     title: "Knowledge graph snapshot"
   - resource: ../../tools/axiom/query.py
     title: "Bounded graph queries"
-  - resource: ../../app/tests/test_sections.py
-    title: "Docs tests"
+  - resource: ../../tools/axiom/docs.py
+    title: "Generated documentation cockpit and diagrams"
+  - resource: ../../app/packages/web/src/app/page.tsx
+    title: "Studio release history, dual-spec preview, and card drawer views"
 ---
 
 # Documentation hub
 
 ## Intent
 
-Make every document findable and every answer traceable: a tree, a ranked search, readable pages with
-their diagrams, and an assistant that cites only what its tools returned.
+Keep architectural knowledge, AxiomSpec nodes, and exported release specifications traceable across the
+repository (`docs/README.md` via `./tools/axiom/axiom docs`) and inspectable directly inside the Spec
+Studio drawer and Release Archive.
 
 ## Data sources
 
-aeion-core's own knowledge and AxiomSpec pages, the vendored Elephant-Goldfish documents, saved feature
-documents, and each product's README, generated pages, exports and diagrams.
+`aeion-spec`'s own `knowledge/` markdown files, `knowledge/spec/spec.json`, generated SVG diagrams in
+`docs/generated/diagrams/`, and sealed project release artifacts.
 
 ## Inputs
 
-A search query, a page id (`<root>:<path>`), or a question for the assistant.
+Repository files indexed by `tools/axiom/graph.py`, CLI queries via `tools/axiom/axiom`, and UI drawer/archive
+inspections in the Next.js workbench.
 
 ## Outputs
 
-Rendered pages with rewritten links and diagram images; ranked sections; an answer with numbered
-sources that link to the page section or graph node they came from.
+Static generated cockpit pages (`docs/README.md`, `docs/generated/`), graph query packets, and rendered
+spec/Axiom views inside the Spec Studio UI.
 
 ## Invariants
 
-- Search is BM25 over heading sections; the index rebuilds when files change.
-- A page is served only from a configured root; diagram assets only from `docs/generated/diagrams/*.svg`.
-- Every citation in an answer refers to an evidence item a tool returned in that run; others are dropped
-  (test_sections).
-- A long page opens as an outline; the assistant then reads one section.
+- All diagram assets and generated docs derive deterministically from `knowledge/` and `spec.json`.
+- Nothing is hand-edited under `docs/generated/`; `tools/axiom/axiom check` verifies freshness.
 
 ## Determinism
 
-Search ranking and graph queries are deterministic for the same files.
+Graph snapshots, generated Markdown pages, and SVG views are deterministic for unchanged inputs.
 
 ## Acceptance checks
 
-- [ ] A question about a requirement returns its tests and decisions with graph citations.
+- [ ] `./tools/axiom/axiom graph && ./tools/axiom/axiom docs && ./tools/axiom/axiom check` passes.
 
 ## Out of scope
 
-Web search and documents outside the configured roots.
+Live third-party web scraping; the legacy standalone Python `docshub.py` server was replaced by the unified Next.js workbench and Axiom cockpit.

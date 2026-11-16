@@ -31,6 +31,15 @@ sources:
   - id: ci
     resource: ../../.github/workflows/ci.yml
     title: "Pull request and branch checks"
+  - id: openshell_quarantine
+    resource: ../../app/openshell/quarantine.py
+    title: "Zero-trust archive & GitHub quarantine scrubber"
+  - id: openshell_sandbox
+    resource: ../../app/openshell/sandbox.py
+    title: "OpenShell & Docker read-only sandbox driver"
+  - id: openshell_service
+    resource: ../../app/packages/server/src/openshell/service.ts
+    title: "Server-side OpenShell orchestration & sandbox read API"
 ---
 
 # Æion Factory architecture

@@ -1,6 +1,6 @@
 # Agent instructions
-**This repository is Æion Core**: a local web app taking a feature from brainstorm to the feature file
-aeion-observability builds ([README](README.md)). Python server in `app/aeion`, Flue agents in `app/flue` (Node).
+**This repository is Æion Spec**: a zero-trust specification & Goldfish review platform built with
+Bun + Elysia + Eden + Next.js, Flue + Pi + LiteLLM, and OpenShell ([README](README.md)).
 
 **Self-check before touching anything:**
 1. Which mode is this session in (local by default; team means `develop`)?
@@ -35,7 +35,7 @@ work/         current.md, the state of open tasks only
 tech-watch/   the technical watch: method, and pending dated packages
 loops/        orchestrator.sh and its prompts, schedules, issue protocol, Decisions API client (off)
 skills/       versioned passive skills and agent profiles; no automatic agent launching
-app/          the application: aeion/ (stdlib server, sections), flue/ (agents, skills, tools), web/, tests/
+app/          packages/ (server, web, flue, shared), openshell/, axiom03/, tests/, serve
 tools/        knowledge/link/health checks, axiom/ (AxiomSpec engine), agent adapters, language servers
 .claude/      original hooks, maintained skills, path-scoped rules, hookify examples
 .codex/       Codex native config/hooks; .agents/ holds skill links and Antigravity's hooks.json
@@ -49,7 +49,7 @@ tools/        knowledge/link/health checks, axiom/ (AxiomSpec engine), agent ada
 
 ```bash
 tools/knowledge/knowledge-check && tools/knowledge/doc-links && tools/repo-health/repo-health
-tools/factory-tests && python3 -m unittest discover -s app/tests   # template suites, then the app (CI)
+tools/factory-tests && (cd app && bun test packages/server/test) && .venv/bin/python -m unittest discover -s app/tests
 tools/axiom/axiom check && tools/axiom/axiom validate   # spec gates, dangling IDs, generated docs current
 ```
 

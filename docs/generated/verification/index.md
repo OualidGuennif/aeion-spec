@@ -77,52 +77,52 @@ Gate results are computed from `knowledge/spec/spec.json` by `tools/axiom/axiom 
 
 | Test | Result | Collected | Spec at execution | Matches current spec |
 | --- | --- | --- | --- | --- |
-| TEST-001 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-002 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-003 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-004 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-005 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-006 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-007 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-008 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-009 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-010 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-011 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-012 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-013 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-014 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-015 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-016 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-017 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-018 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-019 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-020 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-021 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-022 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-023 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-024 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-025 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-026 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-027 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-028 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-029 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-030 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-031 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-032 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-033 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-034 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-035 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-036 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-037 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-038 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-039 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-040 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-041 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-042 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-043 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-044 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-045 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-046 | pass | 1 | `8f34efcddba6` | yes |
-| TEST-047 | pass | 1 | `8f34efcddba6` | yes |
+| TEST-001 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-002 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-003 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-004 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-005 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-006 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-007 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-008 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-009 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-010 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-011 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-012 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-013 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-014 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-015 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-016 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-017 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-018 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-019 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-020 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-021 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-022 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-023 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-024 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-025 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-026 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-027 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-028 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-029 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-030 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-031 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-032 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-033 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-034 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-035 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-036 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-037 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-038 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-039 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-040 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-041 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-042 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-043 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-044 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-045 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-046 | pass | 1 | `8f34efcddba6` | no (stale) |
+| TEST-047 | pass | 1 | `8f34efcddba6` | no (stale) |
 
 Source-tree freshness is checked live by `tools/axiom/axiom evidence check`, not here.

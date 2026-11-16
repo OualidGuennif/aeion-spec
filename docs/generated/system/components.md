@@ -7,66 +7,66 @@
 
 Serves the page and the JSON API, stores sessions and features, renders Markdown safely.
 
-Boundary: app/aeion server, store, config and markdown; loopback only
+Boundary: app/packages/server/src/{app,auth,db,vault}; SQLite & volatile Invite Mode
 
 Implements: [REQ-017](../product/requirements.md#req-017), [REQ-018](../product/requirements.md#req-018), [REQ-019](../product/requirements.md#req-019), [REQ-020](../product/requirements.md#req-020), [REQ-025](../product/requirements.md#req-025), [REQ-026](../product/requirements.md#req-026)
 
-- BIND-048 code `app/aeion/server.py` symbol `Handler` (must_resolve)
-- BIND-049 code `app/aeion/store.py` symbol `Store.path` (must_resolve)
-- BIND-050 code `app/aeion/markdown.py` symbol `render` (must_resolve)
-- BIND-051 code `app/aeion/config.py` symbol `loopback` (must_resolve)
+- BIND-048 code `app/packages/server/src/app.ts` symbol `mapErrorStatus` (must_resolve)
+- BIND-049 code `app/packages/server/src/db/repository.ts` symbol `StoreRepository.createPersistentSession` (must_resolve)
+- BIND-050 code `app/packages/server/src/vault/crypto.ts` symbol `sealSecret` (must_resolve)
+- BIND-051 code `app/packages/server/src/auth/service.ts` symbol `requireAuthContext` (must_resolve)
 
 <a id="comp-002"></a>
 ## COMP-002 Flue agents
 
 Launches one Flue agent per task, relays its model calls with the key and validates its submissions.
 
-Boundary: app/aeion/agents.py and app/flue; the key never leaves the server process
+Boundary: app/packages/server/src/relay & app/packages/flue; plaintext keys stay in vault
 
 Implements: [REQ-001](../product/requirements.md#req-001), [REQ-002](../product/requirements.md#req-002), [REQ-003](../product/requirements.md#req-003), [REQ-004](../product/requirements.md#req-004), [REQ-005](../product/requirements.md#req-005), [REQ-026](../product/requirements.md#req-026)
 
-- BIND-052 code `app/aeion/agents.py` symbol `Agents.run` (must_resolve)
-- BIND-053 code `app/aeion/agents.py` symbol `Gateway.forward` (must_resolve)
-- BIND-054 code `app/aeion/agents.py` symbol `Run.call` (must_resolve)
-- BIND-055 code `app/aeion/agents.py` symbol `content\_length` (must_resolve)
+- BIND-052 code `app/packages/server/src/relay/flue-runner.ts` symbol `invokeFlueAgent` (must_resolve)
+- BIND-053 code `app/packages/server/src/relay/context-relay.ts` symbol `handleRelayToolCall` (must_resolve)
+- BIND-054 code `app/packages/server/src/relay/litellm\_bridge.py` symbol `chat\_completions` (must_resolve)
+- BIND-055 code `app/packages/flue/src/provider.ts` symbol `modelFromEnv` (must_resolve)
 
 <a id="comp-003"></a>
 ## COMP-003 Brainstorm and design
 
 Runs the Elephant conversation, the Goldfish reviews, drafting and resolution.
 
-Boundary: app/aeion brainstorm, design and goldfish
+Boundary: app/packages/server/src/tableau/orchestrator.ts & Elephant-Goldfish Flue agents
 
 Implements: [REQ-006](../product/requirements.md#req-006), [REQ-007](../product/requirements.md#req-007), [REQ-008](../product/requirements.md#req-008), [REQ-009](../product/requirements.md#req-009)
 
-- BIND-056 code `app/aeion/brainstorm.py` symbol `turn` (must_resolve)
-- BIND-057 code `app/aeion/goldfish/\_\_init\_\_.py` symbol `run` (must_resolve)
-- BIND-058 code `app/aeion/design.py` symbol `resolve` (must_resolve)
+- BIND-056 code `app/packages/server/src/tableau/orchestrator.ts` symbol `startOrContinueInterview` (must_resolve)
+- BIND-057 code `app/packages/flue/src/agents/goldfish.ts` symbol `Goldfish` (must_resolve)
+- BIND-058 code `app/packages/server/src/tableau/orchestrator.ts` symbol `transitionTableauCard` (must_resolve)
 
 <a id="comp-004"></a>
 ## COMP-004 Spec studio
 
 Merges checked fragments into the product spec, runs the interview and exports approved features.
 
-Boundary: app/aeion/specstudio.py; reads aeion-observability, never writes it
+Boundary: app/packages/web & app/packages/server/src/{axiom,observability}; reads targets in OpenShell, never mutates them
 
 Implements: [REQ-010](../product/requirements.md#req-010), [REQ-011](../product/requirements.md#req-011), [REQ-012](../product/requirements.md#req-012), [REQ-013](../product/requirements.md#req-013), [REQ-014](../product/requirements.md#req-014), [REQ-021](../product/requirements.md#req-021), [REQ-022](../product/requirements.md#req-022), [REQ-023](../product/requirements.md#req-023), [REQ-024](../product/requirements.md#req-024)
 
-- BIND-059 code `app/aeion/specstudio.py` symbol `draft` (must_resolve)
-- BIND-060 code `app/aeion/specstudio.py` symbol `approve` (must_resolve)
-- BIND-061 code `app/aeion/specstudio.py` symbol `export\_issues` (must_resolve)
-- BIND-062 code `app/aeion/specstudio.py` symbol `change` (must_resolve)
-- BIND-063 code `app/aeion/specstudio.py` symbol `\_save\_spec` (must_resolve)
+- BIND-059 code `app/packages/server/src/observability/exporter.ts` symbol `buildFeatureMarkdown` (must_resolve)
+- BIND-060 code `app/packages/server/src/observability/exporter.ts` symbol `validateObservabilityMarkdown` (must_resolve)
+- BIND-061 code `app/packages/server/src/observability/exporter.ts` symbol `buildObservabilityBundle` (must_resolve)
+- BIND-062 code `app/packages/server/src/axiom/compiler.ts` symbol `buildAxiom03Document` (must_resolve)
+- BIND-063 code `app/axiom03/engine.py` symbol `handle\_validate\_spec` (must_resolve)
 
 <a id="comp-005"></a>
 ## COMP-005 Docs hub
 
 Indexes every document, serves pages with diagrams and runs the librarian's tools.
 
-Boundary: app/aeion/docshub.py; configured roots only
+Boundary: tools/axiom/graph.py, query.py, docs.py & Next.js Studio views; configured roots only
 
 Implements: [REQ-015](../product/requirements.md#req-015), [REQ-016](../product/requirements.md#req-016)
 
-- BIND-064 code `app/aeion/docshub.py` symbol `Corpus.search` (must_resolve)
-- BIND-065 code `app/aeion/docshub.py` symbol `Assistant.ask` (must_resolve)
-- BIND-066 code `app/aeion/docshub.py` symbol `section\_text` (must_resolve)
+- BIND-064 code `tools/axiom/graph.py` symbol `snapshot` (must_resolve)
+- BIND-065 code `tools/axiom/query.py` symbol `run` (must_resolve)
+- BIND-066 code `app/packages/web/src/lib/api.ts` symbol `createApiClient` (must_resolve)

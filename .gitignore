@@ -21,9 +21,14 @@ __pycache__/
 node_modules/
 .venv/
 
-# aeion-core
+# aeion-spec
 source/
 workspace/
-.env
-app/aeion/.env
-app/flue/node_modules/
+app/.aeion/
+app/packages/*/node_modules/
+app/packages/web/.next/
+app/packages/web/out/
+app/packages/web/next-env.d.ts
+app/packages/*/dist/
+app/packages/*/*.tsbuildinfo
+coverage/
