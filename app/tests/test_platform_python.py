@@ -3,7 +3,9 @@
 """Python-side security & AxiomSpec 0.3 / OpenShell / LiteLLM contract verification."""
 from __future__ import annotations
 
+import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -50,6 +52,22 @@ class PlatformPythonTests(unittest.TestCase):
             self.assertNotIn("abcdefghijklmnopqrstuvwxyz", res["files"]["src/index.ts"])
             self.assertTrue(any("outside.sh" in r for r in res["rejectedEntries"]))
             self.assertTrue(any("sym" in r for r in res["rejectedEntries"]))
+
+    def test_quarantine_directory_stops_at_the_file_cap_across_folders(self) -> None:
+        # Loaded in-process so the cap can be lowered without writing 15,000 files.
+        spec = importlib.util.spec_from_file_location("aeion_quarantine", QUARANTINE_PY)
+        quarantine = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(quarantine)
+        quarantine.MAX_FILES = 2
+        with tempfile.TemporaryDirectory() as tmp:
+            for folder in ("a", "b", "c"):
+                (Path(tmp) / folder).mkdir()
+                for name in ("one.txt", "two.txt"):
+                    (Path(tmp) / folder / name).write_text(f"{folder}/{name}\n")
+            os.symlink(Path(tmp) / "a" / "one.txt", Path(tmp) / "a" / "link.txt")
+            res = quarantine._quarantine_directory(Path(tmp))
+        self.assertEqual(res["fileCount"], 2)
+        self.assertIn("a/link.txt: symlink rejected", res["rejectedEntries"])
 
     def test_axiom03_engine_validates_strict_spec_and_rejects_broken_release_bump(self) -> None:
         base_spec = {

@@ -202,11 +202,14 @@ def _quarantine_directory(root_dir: Path) -> dict[str, Any]:
         cur_path = Path(current)
         for fname in sorted(filenames):
             fpath = cur_path / fname
+            rel_posix = PurePosixPath(*fpath.relative_to(resolved_root).parts).as_posix()
+            # The cap ends the whole walk: breaking one folder's loop let every later folder add more.
+            if len(files) >= MAX_FILES:
+                rejected.append(f"{rel_posix}: file count limit reached, the rest of the tree skipped")
+                return _finalize_snapshot(files, rejected, expanded_total, redactions_total)
             if fpath.is_symlink():
-                rejected.append(f"{fname}: symlink rejected")
+                rejected.append(f"{rel_posix}: symlink rejected")
                 continue
-            rel_obj = fpath.relative_to(resolved_root)
-            rel_posix = PurePosixPath(*rel_obj.parts).as_posix()
             try:
                 fd = os.open(fpath, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             except OSError as exc:
@@ -228,8 +231,6 @@ def _quarantine_directory(root_dir: Path) -> dict[str, Any]:
                 continue
             _stored, red = _add_file_to_snapshot(files, rejected, rel_posix, raw)
             redactions_total += red
-            if len(files) >= MAX_FILES:
-                break
 
     return _finalize_snapshot(files, rejected, expanded_total, redactions_total)
 

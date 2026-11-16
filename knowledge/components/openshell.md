@@ -50,7 +50,8 @@ files in RAM only; registered projects get read-only (`0444`) files under
 ## Invariants
 
 - Refused: archives over 100 MiB, over 250 MiB expanded, over a 25x ratio past 10 MiB, absolute or
-  `..` paths, symlinks, non-regular files, and files over 2 MiB.
+  `..` paths, symlinks, non-regular files, and files over 2 MiB. A snapshot holds at most 15,000 files;
+  a repository walk stops at the cap and says so once in the rejected entries.
 - Version-control and dependency folders (`.git`, `node_modules`, `.venv`, `.next`, …) are skipped.
 - `.env*`, `.pem`, `.key`, `.p12`, `.pfx` contents are replaced; Anthropic, OpenAI, GitHub and AWS
   keys and private-key blocks are redacted in every text file; binaries are dropped.

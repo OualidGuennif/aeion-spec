@@ -11,6 +11,8 @@ dates them at release time. Spec: knowledge/policies/engineering.md
   asks for a file's docs to be read before it is edited. The embedded AxiomSpec engine, `efficiency/` and
   `knowledge/axiomspec/` left the repository. `knowledge/spec/` and the `docs/` cockpit stay frozen until
   migrated to aeion-framework. OpenShell has its own spec (`knowledge/components/openshell.md`).
+- A GitHub snapshot stops at its 15,000-file cap instead of letting every later folder add more, and a
+  rejected symlink is named by its path in the repository.
 - Rebuilt the application as **Æion Spec** (`aeion-spec`) on Bun + Elysia + Eden Treaty + Next.js with
   dual-mode auth (Argon2id accounts & ephemeral `:memory:` Invite Mode) and an AES-256-GCM + HKDF-SHA256
   user vault for provider API keys and read-only GitHub tokens.
