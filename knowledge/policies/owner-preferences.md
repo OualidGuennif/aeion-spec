@@ -44,6 +44,8 @@ under its heading: `- <preference> (<source>, YYYY-MM-DD)`.
   for necessary user decisions and concise final results (chat, 2026-10-29).
 - GitHub release notes carry the changelog lines only, with no "Generated with Claude Code" line
   (chat, 2026-11-04)
+- In Æion Spec, skip the dsh (DeepSeek Harness) install step: do not list it as an owner action
+  (chat, 2026-11-16)
 
 ## Engineering
 
