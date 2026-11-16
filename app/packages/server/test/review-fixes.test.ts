@@ -376,12 +376,22 @@ describe("Card lifecycle gates", () => {
         csrf: u.csrf,
         body: { nextReleaseTitle: `Next ${version}`, nextReleaseVersion: version },
       });
-    const results = await Promise.all([seal("0.2.0"), seal("0.3.0")]);
+    const sealing = [seal("0.2.0"), seal("0.3.0")];
+    // A header rename racing the seal is refused too: the seal signs the header it read.
+    const rename = call(`/api/projects/${p.id}/release`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: { title: "Renamed during seal", version: "0.7.0" },
+    });
+    const results = await Promise.all(sealing);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect((await rename).status).toBe(409);
 
     const releases = await call(`/api/projects/${p.id}/releases`, { session: u.session });
-    const statuses = (releases.json.releases as Array<{ id: string; status: string }>).map((r) => r.status);
-    expect(statuses.filter((s) => s === "active")).toHaveLength(1);
+    const rows = releases.json.releases as Array<{ id: string; status: string; version: string; title: string }>;
+    expect(rows.filter((r) => r.status === "active")).toHaveLength(1);
+    expect(rows.some((r) => r.title === "Renamed during seal")).toBe(false);
 
     // The store refuses a seal of a sheet that is no longer active, whatever the caller checked before.
     const ctx = StoreRepository.resolveSession(u.session)!;

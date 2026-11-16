@@ -743,6 +743,10 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         return { error: "Project not found." };
       }
       const release = getActiveRelease(project.id, project.activeReleaseId, ctx.db);
+      // The seal signs the header it read; a rename during it would mislabel the signed snapshot.
+      if (releasesSealing.has(release.id)) {
+        throw new WorkflowGateError(`Release ${release.version} is being sealed; try again when it ends.`);
+      }
       StoreRepository.updateActiveReleaseMeta(
         ctx.db,
         project.id,
