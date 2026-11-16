@@ -97,6 +97,12 @@ describe("Vault Cryptography & AAD Integrity", () => {
         (txt) => txt,
       ),
     ).toThrow();
+
+    // A truncated tag (a valid prefix of the real one) is refused: only full 16-byte tags count.
+    const shortTag = Buffer.from(env.dataTagB64, "base64").subarray(0, 12).toString("base64");
+    expect(() =>
+      withUnsealedSecret({ rootKey, ctx, envelope: { ...env, dataTagB64: shortTag } }, (txt) => txt),
+    ).toThrow();
   });
 });
 

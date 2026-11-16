@@ -38,6 +38,7 @@ export interface SecretAadContext {
 }
 
 const APP_STATE_DIR = resolve(import.meta.dir, "../../../../.aeion");
+const GCM_TAG_BYTES = 16;
 const DEFAULT_MASTER_KEY_FILE = resolve(APP_STATE_DIR, "master.key");
 
 let cachedPersistentMasterKey: Buffer | null = null;
@@ -142,7 +143,7 @@ export function sealSecret(params: {
 
   try {
     const dataIv = randomBytes(12);
-    const dataCipher = createCipheriv("aes-256-gcm", dek, dataIv);
+    const dataCipher = createCipheriv("aes-256-gcm", dek, dataIv, { authTagLength: GCM_TAG_BYTES });
     dataCipher.setAAD(aad);
     const encryptedData = Buffer.concat([
       dataCipher.update(plainBuf),
@@ -151,7 +152,7 @@ export function sealSecret(params: {
     const dataTag = dataCipher.getAuthTag();
 
     const dekIv = randomBytes(12);
-    const dekCipher = createCipheriv("aes-256-gcm", kek, dekIv);
+    const dekCipher = createCipheriv("aes-256-gcm", kek, dekIv, { authTagLength: GCM_TAG_BYTES });
     dekCipher.setAAD(aad);
     const wrappedDek = Buffer.concat([dekCipher.update(dek), dekCipher.final()]);
     const dekTag = dekCipher.getAuthTag();
@@ -197,10 +198,12 @@ export function withUnsealedSecret<T>(
   let plainBuf: Buffer | null = null;
 
   try {
+    // A fixed 16-byte tag: without it GCM accepts a truncated tag an attacker can forge more easily.
     const dekDecipher = createDecipheriv(
       "aes-256-gcm",
       kek,
       Buffer.from(envelope.dekIvB64, "base64"),
+      { authTagLength: GCM_TAG_BYTES },
     );
     dekDecipher.setAAD(aad);
     dekDecipher.setAuthTag(Buffer.from(envelope.dekTagB64, "base64"));
@@ -213,6 +216,7 @@ export function withUnsealedSecret<T>(
       "aes-256-gcm",
       dek,
       Buffer.from(envelope.dataIvB64, "base64"),
+      { authTagLength: GCM_TAG_BYTES },
     );
     dataDecipher.setAAD(aad);
     dataDecipher.setAuthTag(Buffer.from(envelope.dataTagB64, "base64"));

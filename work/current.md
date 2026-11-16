@@ -8,7 +8,7 @@ lines `- Owner decision:`, `- State:`, `- Next:` (with who), `- Blocker:`, `- Ev
 ## Full review, bug fixes, glass UI redesign and template 4.0.3 bump — WAITING-OWNER
 - Owner decision: 2026-11-16, review all of `app/`, fix bugs and inconsistencies, redesign the UI (PayPal/Apple glass/Skyscanner), bump aeion-template to 4.0.3, remove archify and graphify, update CI.
 - State: review fixes, glass UI, Template 4.0.3, CI name fix and the independent review's three fixes (busy card 409, single seal per sheet, late invite import refused) committed on `develop`; 22/22 Bun, 3 Python, template-tests and doc gates PASS. Owner asked on 2026-11-16 to push `develop`, then release to `main`.
-- Next: independent re-review of the head, push `develop`, release PR `develop → main`, merge on green CI, tag v0.2.0 (who: agent). Then owner: visual yes on the UI, `tools/agents/dsh-install --tag v4.0.3 --trust .`, desktop restart, aeion-framework migration decision.
+- Next: `develop` pushed at 6bf363e with Review: OK; release PR OualidGuennif/aeion-spec#2 open, its Semgrep and gitleaks findings fixed in the next commit; review it, push, merge on green CI, tag v0.2.0 (who: agent). Then owner: visual yes on the UI, `tools/agents/dsh-install --tag v4.0.3 --trust .`, desktop restart, aeion-framework migration decision.
 - Blocker: none.
 - Evidence: `work/handovers/f9eb7adc-8f5d-4ba3-89e7-4ef2481349ce.md`
 

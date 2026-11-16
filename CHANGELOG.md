@@ -12,6 +12,8 @@ dates them at release time. Spec: knowledge/policies/engineering.md
   saves; two seals of one sheet leave one sealed release and one active sheet, and a sheet's header
   cannot be renamed while it is sealed; an invite import that ends after its session is dropped instead
   of kept in RAM; quarantine helpers stop after 180 s; and `/api/health` reports the real version.
+- The vault's AES-GCM accepts only full 16-byte tags, and CI installs Bun through a pinned
+  `oven-sh/setup-bun` instead of piping a script into a shell (both found by the release's Semgrep scan).
 - The application test job keeps the name `main`'s branch protection requires, so a release can merge.
 - Updated Æion Factory 3.0.0 to Æion Template 4.0.3: the marker is `.aeion-template`, CI runs
   `tools/template-tests` and no longer runs `axiom check` or the efficiency bundle, and the doc gate now

@@ -67,7 +67,7 @@ HMAC-SHA256 release digests, and 8-section Observability feature manifests (`<= 
 - Auth uses Argon2id hashes (`Bun.password`) and CSRF-guarded HttpOnly cookies; Invite Mode wipes all
   in-memory projects, vault secrets, and interviews cleanly on logout or TTL expiry.
 - Vault secrets are wrapped with per-user DEKs via AES-256-GCM + HKDF-SHA256 + AAD binding (`userId`,
-  `keyId`, `purpose`, `provider`) and buffer zeroization.
+  `keyId`, `purpose`, `provider`) and buffer zeroization; a GCM tag must be the full 16 bytes.
 - Every sealed release compiles cumulatively across prior sealed releases while allowing active Kanban
   sheets to clean validated cards after release sign-off.
 - No plaintext API key or GitHub token is returned in any HTTP response or error message.
