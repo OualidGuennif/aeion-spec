@@ -27,7 +27,8 @@ jobs:
       - run: ./tools/template-tests
 
   app-tests:
-    name: Application tests (Bun + Elysia + Next.js + Python OpenShell/Axiom03)
+    # main's branch protection requires a check by exactly this name; a rename blocks every release merge.
+    name: Application tests (Python, with the Flue harness)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
