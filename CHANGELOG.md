@@ -6,6 +6,8 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
 - Updated Æion Factory 3.0.0 to Æion Template 4.0.3: the marker is `.aeion-template`, CI runs
   `tools/template-tests` and no longer runs `axiom check` or the efficiency bundle, and the doc gate now
   asks for a file's docs to be read before it is edited. The embedded AxiomSpec engine, `efficiency/` and
