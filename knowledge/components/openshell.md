@@ -60,7 +60,9 @@ files in RAM only; registered projects get read-only (`0444`) files under
   path resolves own keys only.
 - `mode` reports what the host offers (`openshell`, `docker-hardened` or `quarantine-readonly`); the
   server itself only reads the frozen snapshot and never executes its code.
-- Logging out of an invite session or its expiry clears that session's snapshots.
+- Logging out of an invite session or its expiry clears that session's snapshots, and an import that
+  finishes after its invite session ended is refused instead of kept in RAM with no owner.
+- A quarantine or sandbox helper that runs past 180 s is killed and the import fails.
 
 ## Determinism
 

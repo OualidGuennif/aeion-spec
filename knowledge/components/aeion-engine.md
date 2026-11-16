@@ -77,8 +77,12 @@ HMAC-SHA256 release digests, and 8-section Observability feature manifests (`<= 
   is archived or belongs to a sealed release is refused with 409, and so is a review request before both
   the swarm and the owner are satisfied; editing a card or withdrawing the owner's satisfaction demotes a
   passed review back to the interview.
+- A card is refused with 409 while an interview turn, a review or a move runs on it, so a write cannot
+  be overwritten when that run saves; a seal waits for every card of the sheet to be idle.
 - A seal needs a version greater than the last sealed one and runs in one transaction with its
-  optional release notes; a failed GitHub ingest deletes the half-created project.
+  optional release notes; the store seals only a sheet that is still active, so two seals of one sheet
+  leave one sealed release and one active sheet. A failed GitHub ingest deletes the half-created project.
+- `/api/health` reports the version from the repository's `VERSION` file.
 - A slug is unique per owner; the default Model Mixer picks providers the owner holds a key for; a vault
   key of another purpose or provider is refused for a role.
 
@@ -89,7 +93,7 @@ compilation and accurate G14 incremental release diffs across sealed versions.
 
 ## Acceptance checks
 
-- [ ] `(cd app && bun test packages/server/test)` passes (19 tests, including `review-fixes.test.ts`).
+- [ ] `(cd app && bun test packages/server/test)` passes (22 tests, including `review-fixes.test.ts`).
 - [ ] `.venv/bin/python -m unittest discover -s app/tests -v` passes Python quarantine & Axiom03 checks.
 
 ## Out of scope

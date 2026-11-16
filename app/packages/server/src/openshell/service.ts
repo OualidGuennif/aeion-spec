@@ -16,6 +16,7 @@ import {
   type OpenShellScanSummary,
   type SessionMode,
 } from "@aeion-spec/shared";
+import { inviteWorkspaceExists } from "../db/repository.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../../..");
 const PYTHON_BIN = resolve(REPO_ROOT, ".venv/bin/python");
@@ -56,6 +57,9 @@ const snapshotRegistry = new Map<
   }
 >();
 
+// The GitHub clone alone may take 90 s; the walk and the scrub get the rest.
+const HELPER_TIMEOUT_MS = 180_000;
+
 async function runPythonScript<T>(
   script: string,
   payload: Record<string, unknown>,
@@ -67,11 +71,20 @@ async function runPythonScript<T>(
   });
   proc.stdin.write(JSON.stringify(payload));
   proc.stdin.end();
+  // A hostile archive can keep the helper decompressing; past the deadline it is killed, never awaited.
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, HELPER_TIMEOUT_MS);
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
-  ]);
+  ]).finally(() => clearTimeout(deadline));
+  if (timedOut) {
+    throw new Error(`OpenShell helper stopped after ${HELPER_TIMEOUT_MS / 1000} s.`);
+  }
   if (code !== 0 && !stdout.trim()) {
     throw new Error(`OpenShell helper failed (${code}): ${stderr}`);
   }
@@ -252,6 +265,10 @@ async function registerQuarantinedSource(params: {
 
   // Invite files live only in RAM; an authenticated workspace was just written to disk by materialize.
   if (sessionMode === "invite") {
+    // The session may have ended while the quarantine ran; its teardown already cleared this registry.
+    if (!inviteWorkspaceExists(ownerSessionId)) {
+      throw new Error("The invite session ended during the import; nothing was kept.");
+    }
     snapshotRegistry.set(projectId, {
       sessionMode,
       ownerSessionId,

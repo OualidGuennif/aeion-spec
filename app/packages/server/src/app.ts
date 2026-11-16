@@ -1,5 +1,7 @@
 // Spec: knowledge/components/aeion-engine.md
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cors } from "@elysiajs/cors";
 import { Elysia, t } from "elysia";
 import {
@@ -41,7 +43,7 @@ import {
   signAndVerifyAxiom03Release,
   validateAxiom03Spec,
 } from "./axiom/compiler.ts";
-import { onInviteWorkspaceDestroyed, StoreRepository } from "./db/repository.ts";
+import { onInviteWorkspaceDestroyed, ReleaseNotActiveError, StoreRepository } from "./db/repository.ts";
 import {
   buildFeatureMarkdown,
   buildObservabilityBundle,
@@ -92,6 +94,7 @@ function mapErrorStatus(err: unknown, code?: string | number): { status: number;
     err instanceof PayloadTooLargeError ||
     err instanceof MissingVaultCredentialError ||
     err instanceof WorkflowGateError ||
+    err instanceof ReleaseNotActiveError ||
     err instanceof NotFoundError
   ) {
     return { status: err.status, message: err.message };
@@ -121,7 +124,41 @@ class NotFoundError extends Error {
   readonly status = 404;
 }
 
-// A card the caller may change: in this project, in the active release, and not archived unless asked.
+// The repository's VERSION is the one release number; the health check reports it instead of a copy.
+const APP_VERSION = (() => {
+  try {
+    return readFileSync(resolve(import.meta.dir, "../../../../VERSION"), "utf8").trim();
+  } catch {
+    return "unknown";
+  }
+})();
+
+// Cards with a model run in flight (an interview turn or a review). The run saves the card it loaded
+// when it ends, so a write that lands meanwhile would be silently overwritten; it is refused instead.
+const cardsInFlight = new Set<string>();
+// Active release sheets whose seal is running; their cards wait until it ends.
+const releasesSealing = new Set<string>();
+
+function assertCardIdle(card: { id: string; featureCode: string }): void {
+  if (cardsInFlight.has(card.id)) {
+    throw new WorkflowGateError(
+      `${card.featureCode} is busy: an interview turn or a review is running. Try again when it ends.`,
+    );
+  }
+}
+
+// Holds the card for the whole run; the caller has already checked it is idle.
+async function whileCardInFlight<T>(cardId: string, run: () => Promise<T>): Promise<T> {
+  cardsInFlight.add(cardId);
+  try {
+    return await run();
+  } finally {
+    cardsInFlight.delete(cardId);
+  }
+}
+
+// A card the caller may change: in this project, in the active release, not archived unless asked,
+// and not in the middle of a model run.
 function requireActiveCard(
   db: import("bun:sqlite").Database,
   project: { id: string; activeReleaseId: string | null },
@@ -136,6 +173,10 @@ function requireActiveCard(
   }
   if (card.column === "archived" && !options.allowArchived) {
     throw new WorkflowGateError(`${card.featureCode} is archived; restore it to Idea first.`);
+  }
+  assertCardIdle(card);
+  if (releasesSealing.has(release.id)) {
+    throw new WorkflowGateError(`Release ${release.version} is being sealed; try again when it ends.`);
   }
   return { release, card };
 }
@@ -182,7 +223,7 @@ export const app = new Elysia({ name: "aeion-spec-api" })
     return {
       ok: true,
       service: "aeion-spec",
-      version: "0.3.0",
+      version: APP_VERSION,
       axiomVersion: "axiomspec/0.3",
       llmMode: process.env.AEION_LLM === "mock" ? "mock" : "litellm",
       openshell,
@@ -543,14 +584,16 @@ export const app = new Elysia({ name: "aeion-spec-api" })
       const { release, card } = requireActiveCard(ctx.db, project, params.cardId, {
         allowArchived: true,
       });
-      const updated = await transitionTableauCard({
-        ctx,
-        project,
-        release,
-        card,
-        targetColumn: body.targetColumn,
-        position: body.position,
-      });
+      const updated = await whileCardInFlight(card.id, () =>
+        transitionTableauCard({
+          ctx,
+          project,
+          release,
+          card,
+          targetColumn: body.targetColumn,
+          position: body.position,
+        }),
+      );
       return { card: updated };
     },
     { body: MoveCardSchema },
@@ -568,15 +611,17 @@ export const app = new Elysia({ name: "aeion-spec-api" })
       if (card.column === "idea") {
         card.column = "goldfish_interview";
       }
-      const updated = await startOrContinueInterview({
-        ctx,
-        project,
-        release,
-        card,
-        userMessage: body.message,
-        decisionAnswers: body.decisionAnswers,
-        personas: body.personas,
-      });
+      const updated = await whileCardInFlight(card.id, () =>
+        startOrContinueInterview({
+          ctx,
+          project,
+          release,
+          card,
+          userMessage: body.message,
+          decisionAnswers: body.decisionAnswers,
+          personas: body.personas,
+        }),
+      );
       return { card: updated };
     },
     { body: InterviewTurnSchema },
@@ -602,16 +647,18 @@ export const app = new Elysia({ name: "aeion-spec-api" })
             );
           };
           try {
-            const updated = await startOrContinueInterview({
-              ctx,
-              project,
-              release,
-              card,
-              userMessage: body.message,
-              decisionAnswers: body.decisionAnswers,
-              personas: body.personas,
-              onEvent: (evt) => push("progress", evt),
-            });
+            const updated = await whileCardInFlight(card.id, () =>
+              startOrContinueInterview({
+                ctx,
+                project,
+                release,
+                card,
+                userMessage: body.message,
+                decisionAnswers: body.decisionAnswers,
+                personas: body.personas,
+                onEvent: (evt) => push("progress", evt),
+              }),
+            );
             push("complete", { card: updated });
           } catch (err) {
             push("error", {
@@ -675,12 +722,14 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         `${card.featureCode} needs both the swarm and the owner satisfied before its review runs.`,
       );
     }
-    const updated = await runAutomatedReviewPipeline({
-      ctx,
-      project,
-      release,
-      card,
-    });
+    const updated = await whileCardInFlight(card.id, () =>
+      runAutomatedReviewPipeline({
+        ctx,
+        project,
+        release,
+        card,
+      }),
+    );
     return { card: updated };
   })
   // Release Metadata, Validate ("Clean the Sheet"), and Historical Releases Vault
@@ -736,77 +785,88 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         };
       }
 
-      const previousSealed = StoreRepository.listReleases(ctx.db, project.id).find(
-        (r) => r.status === "sealed" && r.axiomSnapshotJson && r.sealedDigest,
-      );
+      // A model run that saves its card after the seal would write the old release back onto it,
+      // and a second seal of the same sheet would leave two active ones: both wait for this one.
+      for (const c of StoreRepository.listCards(ctx.db, project.id, currentRel.id)) assertCardIdle(c);
+      if (releasesSealing.has(currentRel.id)) {
+        throw new WorkflowGateError(`Release ${currentRel.version} is already being sealed.`);
+      }
+      releasesSealing.add(currentRel.id);
+      try {
+        const previousSealed = StoreRepository.listReleases(ctx.db, project.id).find(
+          (r) => r.status === "sealed" && r.axiomSnapshotJson && r.sealedDigest,
+        );
 
-      // Keep cumulative validated project features across cleaned sheets so AxiomSpec G14 preserves history
-      const priorCards = StoreRepository.listCumulativeSealedCards(
-        ctx.db,
-        project.id,
-      );
-      const cumulativeByCode = new Map<string, typeof validatedCards[number]>();
-      for (const pc of priorCards) cumulativeByCode.set(pc.featureCode, pc);
-      for (const vc of validatedCards) cumulativeByCode.set(vc.featureCode, vc);
-      const cumulativeCards = [...cumulativeByCode.values()];
+        // Keep cumulative validated project features across cleaned sheets so AxiomSpec G14 preserves history
+        const priorCards = StoreRepository.listCumulativeSealedCards(
+          ctx.db,
+          project.id,
+        );
+        const cumulativeByCode = new Map<string, typeof validatedCards[number]>();
+        for (const pc of priorCards) cumulativeByCode.set(pc.featureCode, pc);
+        for (const vc of validatedCards) cumulativeByCode.set(vc.featureCode, vc);
+        const cumulativeCards = [...cumulativeByCode.values()];
 
-      const compiledDoc = buildAxiom03Document({
-        project,
-        release: currentRel,
-        cards: cumulativeCards,
-        previousRelease: previousSealed ?? null,
-        previousSpec: previousSealed?.axiomSnapshotJson ?? null,
-      });
+        const compiledDoc = buildAxiom03Document({
+          project,
+          release: currentRel,
+          cards: cumulativeCards,
+          previousRelease: previousSealed ?? null,
+          previousSpec: previousSealed?.axiomSnapshotJson ?? null,
+        });
 
-      const report = await validateAxiom03Spec(
-        compiledDoc,
-        previousSealed?.axiomSnapshotJson ?? null,
-      );
-      if (!report.valid) {
-        set.status = 422;
+        const report = await validateAxiom03Spec(
+          compiledDoc,
+          previousSealed?.axiomSnapshotJson ?? null,
+        );
+        if (!report.valid) {
+          set.status = 422;
+          return {
+            error: `AxiomSpec 0.3 release seal blocked: ${report.errors.slice(0, 3).join("; ")}`,
+            axiomReport: report,
+          };
+        }
+
+        const signed = await signAndVerifyAxiom03Release(
+          report.specJson,
+          previousSealed?.axiomSnapshotJson ?? null,
+        );
+        const obsBundle = buildObservabilityBundle({
+          project,
+          release: currentRel,
+          cards: cumulativeCards,
+          focusCard: validatedCards[0]!,
+        });
+
+        const { sealedReleaseId, nextReleaseId } = StoreRepository.sealReleaseAndAdvance(
+          ctx.db,
+          {
+            projectId: project.id,
+            currentReleaseId: currentRel.id,
+            bumpKind: report.recommendedBump,
+            riskScore: report.riskScore,
+            sealedDigest: signed.specDigest,
+            approvalSignature: signed.signature,
+            axiomSnapshotJson: signed.spec,
+            observabilityManifestJson: obsBundle.manifest,
+            cardsSnapshot: validatedCards,
+            nextTitle: body.nextReleaseTitle,
+            nextVersion: body.nextReleaseVersion,
+            releaseNotes: body.releaseNotes ?? null,
+            cleanValidatedCards: body.cleanValidatedCards ?? true,
+          },
+        );
+
+        const releases = StoreRepository.listReleases(ctx.db, project.id);
         return {
-          error: `AxiomSpec 0.3 release seal blocked: ${report.errors.slice(0, 3).join("; ")}`,
+          sealedRelease: releases.find((r) => r.id === sealedReleaseId),
+          nextRelease: releases.find((r) => r.id === nextReleaseId),
+          approvalBundle: signed.approvalBundle,
           axiomReport: report,
         };
+      } finally {
+        releasesSealing.delete(currentRel.id);
       }
-
-      const signed = await signAndVerifyAxiom03Release(
-        report.specJson,
-        previousSealed?.axiomSnapshotJson ?? null,
-      );
-      const obsBundle = buildObservabilityBundle({
-        project,
-        release: currentRel,
-        cards: cumulativeCards,
-        focusCard: validatedCards[0]!,
-      });
-
-      const { sealedReleaseId, nextReleaseId } = StoreRepository.sealReleaseAndAdvance(
-        ctx.db,
-        {
-          projectId: project.id,
-          currentReleaseId: currentRel.id,
-          bumpKind: report.recommendedBump,
-          riskScore: report.riskScore,
-          sealedDigest: signed.specDigest,
-          approvalSignature: signed.signature,
-          axiomSnapshotJson: signed.spec,
-          observabilityManifestJson: obsBundle.manifest,
-          cardsSnapshot: validatedCards,
-          nextTitle: body.nextReleaseTitle,
-          nextVersion: body.nextReleaseVersion,
-          releaseNotes: body.releaseNotes ?? null,
-          cleanValidatedCards: body.cleanValidatedCards ?? true,
-        },
-      );
-
-      const releases = StoreRepository.listReleases(ctx.db, project.id);
-      return {
-        sealedRelease: releases.find((r) => r.id === sealedReleaseId),
-        nextRelease: releases.find((r) => r.id === nextReleaseId),
-        approvalBundle: signed.approvalBundle,
-        axiomReport: report,
-      };
     },
     { body: ValidateReleaseSchema },
   )

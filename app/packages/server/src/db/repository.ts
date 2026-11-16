@@ -179,6 +179,15 @@ const inviteWorkspaces = new Map<string, InviteWorkspace>();
 const inviteTokenIndex = new Map<string, string>();
 const inviteBuilderTokenIndex = new Map<string, string>();
 
+export class ReleaseNotActiveError extends Error {
+  readonly status = 409;
+}
+
+// True while an invite session's RAM workspace exists, so late writers can tell it was torn down.
+export function inviteWorkspaceExists(sessionId: string): boolean {
+  return inviteWorkspaces.has(sessionId);
+}
+
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -1211,8 +1220,8 @@ export class StoreRepository {
 
     // Sealing and advancing is one step: a failure halfway must not leave two active sheets.
     db.transaction(() => {
-      db.query(
-        `UPDATE releases SET status = 'sealed', bump_kind = ?1, risk_score = ?2, sealed_digest = ?3, approval_signature = ?4, axiom_snapshot_json = ?5, observability_manifest_json = ?6, cards_snapshot_json = ?7, sealed_at = ?8, notes = COALESCE(?10, notes) WHERE id = ?9`,
+      const sealed = db.query(
+        `UPDATE releases SET status = 'sealed', bump_kind = ?1, risk_score = ?2, sealed_digest = ?3, approval_signature = ?4, axiom_snapshot_json = ?5, observability_manifest_json = ?6, cards_snapshot_json = ?7, sealed_at = ?8, notes = COALESCE(?10, notes) WHERE id = ?9 AND project_id = ?11 AND status = 'active'`,
       ).run(
         params.bumpKind,
         params.riskScore,
@@ -1224,7 +1233,12 @@ export class StoreRepository {
         now,
         params.currentReleaseId,
         params.releaseNotes?.trim() || null,
+        params.projectId,
       );
+      // Another seal got there first: throwing rolls this one back instead of opening a second sheet.
+      if (sealed.changes !== 1) {
+        throw new ReleaseNotActiveError("This release sheet was already sealed; reload the board.");
+      }
 
       if (params.cleanValidatedCards) {
         db.query(

@@ -8,6 +8,10 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [0.2.0] - 2026-11-16
 
+- A card is refused with 409 while a model run works on it, so an edit is no longer lost when the run
+  saves; two seals of one sheet leave one sealed release and one active sheet; an invite import that
+  ends after its session is dropped instead of kept in RAM; quarantine helpers stop after 180 s; and
+  `/api/health` reports the real version.
 - The application test job keeps the name `main`'s branch protection requires, so a release can merge.
 - Updated Æion Factory 3.0.0 to Æion Template 4.0.3: the marker is `.aeion-template`, CI runs
   `tools/template-tests` and no longer runs `axiom check` or the efficiency bundle, and the doc gate now

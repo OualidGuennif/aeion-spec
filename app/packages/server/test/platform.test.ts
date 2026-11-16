@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { PROVIDER_CATALOG, formatLitellmModelId } from "@aeion-spec/shared";
 import { modelFromEnv } from "../../flue/src/provider.ts";
 import { app } from "../src/app.ts";
-import { getInviteCount } from "../src/db/repository.ts";
+import { getInviteCount, StoreRepository } from "../src/db/repository.ts";
 import { ingestUploadedArchive } from "../src/openshell/service.ts";
 import {
   ensureLiteLlmBridge,
@@ -198,10 +198,13 @@ with zipfile.ZipFile(${JSON.stringify(zipPath)}, "w") as z:
       expect(p.exitCode).toBe(0);
       const bytes = new Uint8Array(await Bun.file(zipPath).arrayBuffer());
 
+      // A live invite session: the import is refused for one that has already ended.
+      const inv = await apiReq("/api/auth/invite", { method: "POST" });
+      const ownerSessionId = StoreRepository.resolveSession(inv.json.sessionToken)!.session.id;
       const summary = await ingestUploadedArchive({
         projectId: "proj_zip_clean",
         sessionMode: "invite",
-        ownerSessionId: "inv_zip",
+        ownerSessionId,
         filename: "sample.zip",
         archiveBytes: bytes,
       });
