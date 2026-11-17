@@ -58,6 +58,8 @@ Deduplicated Goldfish findings (`BLOCKER`/`MAJOR`/`NIT`), extracted `DEC-*` owne
 - An archived card can only be restored to `idea`.
 - Transition to `validated` requires `reviewPassed === true` (zero unresolved blockers across Stage 5-9,
   cross-family reviewer approval, AxiomSpec 0.3 G01-G14 pass, and Observability export validity).
+- `computeMixerConfig` resolves disabled OpenCode Go models against the customer's enabled `/v1/models` list
+  before evaluating cross-family separation.
 
 ## Determinism
 

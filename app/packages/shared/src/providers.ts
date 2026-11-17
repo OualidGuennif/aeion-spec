@@ -322,35 +322,42 @@ export const PROVIDER_CATALOG: Record<LlmProviderId, ProviderSpec> = {
         label: "DeepSeek V4.1 Flash (OpenCode Go)",
         api: "openai-completions",
         contextWindow: 1_000_000,
-        recommendedFor: ["goldfish", "elephant"],
-      },
-      {
-        id: "deepseek-v4-pro",
-        label: "DeepSeek V4 Pro (OpenCode Go)",
-        api: "openai-completions",
-        contextWindow: 1_000_000,
-        recommendedFor: ["reviewer"],
-      },
-      {
-        id: "kimi-k3",
-        label: "Kimi K3 (OpenCode Go)",
-        api: "openai-completions",
-        contextWindow: 1_048_576,
-        recommendedFor: ["elephant", "reviewer"],
-      },
-      {
-        id: "glm-5.3",
-        label: "GLM-5.3 (OpenCode Go)",
-        api: "openai-completions",
-        contextWindow: 1_000_000,
-        recommendedFor: ["goldfish"],
+        recommendedFor: ["elephant", "goldfish"],
       },
       {
         id: "claude-haiku-5-5",
         label: "Claude Haiku 5.5 (OpenCode Go)",
         api: "anthropic-messages",
         contextWindow: 1_000_000,
-        recommendedFor: ["goldfish"],
+        recommendedFor: ["reviewer", "goldfish"],
+      },
+      {
+        id: "glm-5.3-flash",
+        label: "GLM-5.3 Flash (OpenCode Go)",
+        api: "openai-completions",
+        contextWindow: 1_000_000,
+        recommendedFor: ["elephant", "goldfish", "reviewer"],
+      },
+      {
+        id: "minimax-m3.1-flash",
+        label: "MiniMax M3.1 Flash (OpenCode Go)",
+        api: "openai-completions",
+        contextWindow: 512_000,
+        recommendedFor: ["goldfish", "reviewer"],
+      },
+      {
+        id: "qwen3.8-flash",
+        label: "Qwen 3.8 Flash (OpenCode Go)",
+        api: "anthropic-messages",
+        contextWindow: 131_072,
+        recommendedFor: ["goldfish", "reviewer"],
+      },
+      {
+        id: "qwen4-max",
+        label: "Qwen 4 Max (OpenCode Go)",
+        api: "openai-completions",
+        contextWindow: 131_072,
+        recommendedFor: ["elephant", "reviewer"],
       },
     ],
   },
@@ -404,7 +411,24 @@ export function inferVendorFamily(
   if (normalized.includes("qwen")) return "qwen";
   if (normalized.includes("kimi")) return "moonshot";
   if (normalized.includes("glm")) return "zhipu";
+  if (normalized.includes("minimax")) return "minimax";
   return provider;
+}
+
+// When a customer's OpenCode Go key reports its enabled models, keep an enabled choice or fall back by role.
+export function resolveEnabledOpenCodeModel(
+  role: AgentRoleId,
+  modelId: string,
+  enabledModels: readonly string[],
+): string {
+  const clean = modelId.trim().replace(/^opencode_go\//, "");
+  const allowed = enabledModels.map((m) => m.trim().replace(/^opencode_go\//, "")).filter(Boolean);
+  if (allowed.length === 0 || allowed.includes(clean)) return clean;
+  const preferred =
+    role === "reviewer"
+      ? ["claude-haiku-5-5", "glm-5.3-flash", "minimax-m3.1-flash", "qwen3.8-flash", "qwen4-max", "deepseek-v4.1-flash"]
+      : ["deepseek-v4.1-flash", "glm-5.3-flash", "qwen4-max", "minimax-m3.1-flash", "qwen3.8-flash", "claude-haiku-5-5"];
+  return preferred.find((m) => allowed.includes(m)) ?? allowed[0]!;
 }
 
 export function resolveWireApi(

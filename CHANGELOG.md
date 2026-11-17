@@ -6,6 +6,14 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-17
+
+- Aligned the OpenCode Go catalog with the models served on customer accounts (`deepseek-v4.1-flash`,
+  `claude-haiku-5-5`, `glm-5.3-flash`, `minimax-m3.1-flash`, `qwen3.8-flash`, `qwen4-max`), added automatic
+  `/v1/models` discovery and per-role fallback when a configured OpenCode Go model is disabled on the owner's
+  key, and stripped the Flue CLI startup banner from agent error reports so upstream `APIError` details are not
+  truncated.
+
 ## [0.2.1] - 2026-11-16
 
 - Redesigned the Spec Studio web UI around an OpenAI-style monochrome black-and-white palette with a

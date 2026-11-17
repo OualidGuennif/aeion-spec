@@ -45,7 +45,8 @@ Guided 4-step pipeline stage filters and card transition buttons (Ideas, Goldfis
 Validated), archiving a card and restoring it to Ideas, SSE interview turns with customizable Goldfish persona
 selection, `DEC-*` decision settlements (answering one also confirms the unverified assumptions the drawer lists),
 manual finding resolutions, Model Mixer provider and model per role (grouped into core pipeline roles and the
-8-persona Goldfish swarm; temperature and thinking level stay hidden because they do not reach the agents), and
+8-persona Goldfish swarm, filtering OpenCode Go presets to the account's enabled models when discovered;
+temperature and thinking level stay hidden because they do not reach the agents), and
 sealing with optional release notes.
 
 ## Outputs

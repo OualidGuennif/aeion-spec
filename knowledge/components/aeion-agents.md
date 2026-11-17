@@ -99,6 +99,11 @@ Structured text, typed tool payloads (`anchor_hypothesis`, `submit_review`), tok
   the others, it becomes a MAJOR `GF-n-PERSONA-FAILED` finding.
 - The Model Mixer carries provider and model per role; its stored temperature and thinking level are
   not passed to the agents, so the UI does not offer them.
+- For OpenCode Go, the curated catalog lists enabled models (`deepseek-v4.1-flash`, `claude-haiku-5-5`,
+  `glm-5.3-flash`, `minimax-m3.1-flash`, `qwen3.8-flash`, `qwen4-max`), and when a key's `/v1/models` list
+  excludes a role's assigned model, the runner and mixer fall back to an enabled model for that role
+  (`claude-haiku-5-5` first for `reviewer`, `deepseek-v4.1-flash` first for interview and Goldfish roles).
+  Failed Flue runs report the error tail rather than the CLI startup banner.
 
 ## Determinism
 

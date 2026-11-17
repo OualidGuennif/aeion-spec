@@ -73,6 +73,7 @@ export interface ModelMixerConfig {
   effectiveAssignments: Record<AgentRoleId, ModelAssignment>;
   crossFamilyEnforced: boolean;
   warnings: string[];
+  enabledOpenCodeModels?: string[];
 }
 
 export interface OpenShellScanSummary {

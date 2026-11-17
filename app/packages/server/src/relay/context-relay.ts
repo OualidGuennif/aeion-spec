@@ -237,6 +237,48 @@ export function registerRelayRun(params: {
   return run;
 }
 
+const openCodeModelsCache = new Map<string, { models: string[]; expiresAtMs: number }>();
+
+// Queries the customer's enabled OpenCode Go models once per key fingerprint and caches the list in RAM.
+export async function discoverOpenCodeGoModels(ctx: {
+  db: Database;
+  rootKey: Buffer;
+  user: StoredUserRecord;
+}): Promise<string[] | null> {
+  if (process.env.AEION_LLM === "mock") return null;
+  const keyMeta = StoreRepository.listVaultKeys(ctx.db, ctx.user.id).find(
+    (k) => k.purpose === "llm_provider" && k.provider === "opencode-go",
+  );
+  if (!keyMeta) return null;
+  const cached = openCodeModelsCache.get(keyMeta.keyFingerprint);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.models;
+  try {
+    const models = await StoreRepository.withProviderSecret(
+      ctx,
+      { purpose: "llm_provider", provider: "opencode-go" },
+      async (apiKey) => {
+        const res = await fetch("https://opencode.ai/inference/go/v1/models", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!res.ok) return [];
+        const body = (await res.json()) as { data?: Array<{ id?: string }> };
+        return (body.data ?? [])
+          .map((m) => String(m.id || "").trim().replace(/^opencode_go\//, ""))
+          .filter(Boolean);
+      },
+    );
+    if (models.length === 0) return null;
+    openCodeModelsCache.set(keyMeta.keyFingerprint, {
+      models,
+      expiresAtMs: Date.now() + 10 * 60 * 1000,
+    });
+    return models;
+  } catch {
+    return null;
+  }
+}
+
 export function releaseRelayRun(runId: string): void {
   activeRuns.delete(runId);
 }

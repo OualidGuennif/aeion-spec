@@ -85,7 +85,8 @@ HMAC-SHA256 release digests, and 8-section Observability feature manifests (`<= 
   leave one sealed release and one active sheet. A failed GitHub ingest deletes the half-created project.
 - `/api/health` reports the version from the repository's `VERSION` file.
 - A slug is unique per owner; the default Model Mixer picks providers the owner holds a key for; a vault
-  key of another purpose or provider is refused for a role.
+  key of another purpose or provider is refused for a role; for OpenCode Go keys, the relay discovers the
+  account's enabled `/v1/models` list and heals disabled role assignments.
 
 ## Determinism
 
@@ -94,7 +95,7 @@ compilation and accurate G14 incremental release diffs across sealed versions.
 
 ## Acceptance checks
 
-- [ ] `(cd app && bun test packages/server/test)` passes (22 tests, including `review-fixes.test.ts`).
+- [ ] `(cd app && bun test packages/server/test)` passes (23 tests, including `review-fixes.test.ts`).
 - [ ] `.venv/bin/python -m unittest discover -s app/tests -v` passes Python quarantine & Axiom03 checks.
 
 ## Out of scope

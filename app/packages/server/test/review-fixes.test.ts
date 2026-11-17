@@ -9,12 +9,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildDefaultMixer, inferVendorFamily, type TableauCard } from "@aeion-spec/shared";
+import { buildDefaultMixer, inferVendorFamily, PROVIDER_CATALOG, resolveEnabledOpenCodeModel, type TableauCard } from "@aeion-spec/shared";
 import { app } from "../src/app.ts";
 import { parseCookieHeader } from "../src/auth/service.ts";
 import { ReleaseNotActiveError, StoreRepository } from "../src/db/repository.ts";
 import { ingestUploadedArchive, inviteSandboxCount, listSandboxFiles } from "../src/openshell/service.ts";
-import { checkSubmission, readReviewVerdict } from "../src/relay/flue-runner.ts";
+import { checkSubmission, formatFlueFailure, readReviewVerdict } from "../src/relay/flue-runner.ts";
 import { invalidateReview } from "../src/tableau/orchestrator.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
@@ -229,6 +229,29 @@ describe("Model mixer defaults", () => {
     expect(cfg.status).toBe(200);
     expect(Object.keys(cfg.json.effectiveAssignments)).toHaveLength(11);
     expect(cfg.json.crossFamilyEnforced).toBe(true);
+  });
+
+  test("OpenCode Go catalog lists enabled models, falls back when a model is disabled, and keeps the full APIError tail", () => {
+    const ids = PROVIDER_CATALOG["opencode-go"].curatedModels.map((m) => m.id);
+    expect(ids).toEqual([
+      "deepseek-v4.1-flash",
+      "claude-haiku-5-5",
+      "glm-5.3-flash",
+      "minimax-m3.1-flash",
+      "qwen3.8-flash",
+      "qwen4-max",
+    ]);
+
+    const enabled = ["deepseek-v4.1-flash", "glm-5.3-flash", "claude-haiku-5-5", "minimax-m3.1-flash"];
+    expect(resolveEnabledOpenCodeModel("elephant", "glm-5.3-flash", enabled)).toBe("glm-5.3-flash");
+    expect(resolveEnabledOpenCodeModel("elephant", "deepseek-v4-pro", enabled)).toBe("deepseek-v4.1-flash");
+    expect(resolveEnabledOpenCodeModel("reviewer", "glm-5.3", enabled)).toBe("claude-haiku-5-5");
+
+    const banner = "▗ flue run ▚ agent Elephant ▘ id 01M7KBBPTJE1AXNYW2TN3J635D db src/db.ts ".repeat(5);
+    const tail =
+      "OperationFailedError [FlueError]: direct(sub_1) failed: APIError: litellm.APIError: Model access is disabled.";
+    const formatted = formatFlueFailure("elephant", 1, `${banner}\n${tail}`, "");
+    expect(formatted).toContain("Model access is disabled.");
   });
 });
 
