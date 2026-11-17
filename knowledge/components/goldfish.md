@@ -60,6 +60,9 @@ Deduplicated Goldfish findings (`BLOCKER`/`MAJOR`/`NIT`), extracted `DEC-*` owne
   cross-family reviewer approval, AxiomSpec 0.3 G01-G14 pass, and Observability export validity).
 - `computeMixerConfig` resolves disabled OpenCode Go models against the customer's enabled `/v1/models` list
   before evaluating cross-family separation.
+- `buildFeatureMarkdown` includes settled `DEC-*` resolution text inline under `Decision Status` (`RESOLVED: <answer>`),
+  and follow-up/reassessment Goldfish rounds (`goldfishRound >= 1` or Stage 5-9 reassessment) instruct each lens to
+  verify resolved objections against declared scope and emit `[BLOCKER]`/`[MAJOR]` only for remaining critical gaps.
 
 ## Determinism
 

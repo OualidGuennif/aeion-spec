@@ -14,7 +14,8 @@ import { app } from "../src/app.ts";
 import { parseCookieHeader } from "../src/auth/service.ts";
 import { ReleaseNotActiveError, StoreRepository } from "../src/db/repository.ts";
 import { ingestUploadedArchive, inviteSandboxCount, listSandboxFiles } from "../src/openshell/service.ts";
-import { checkSubmission, formatFlueFailure, readReviewVerdict } from "../src/relay/flue-runner.ts";
+import { buildFeatureMarkdown } from "../src/observability/exporter.ts";
+import { buildGoldfishPrompt, checkSubmission, formatFlueFailure, readReviewVerdict } from "../src/relay/flue-runner.ts";
 import { invalidateReview } from "../src/tableau/orchestrator.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
@@ -252,6 +253,78 @@ describe("Model mixer defaults", () => {
       "OperationFailedError [FlueError]: direct(sub_1) failed: APIError: litellm.APIError: Model access is disabled.";
     const formatted = formatFlueFailure("elephant", 1, `${banner}\n${tail}`, "");
     expect(formatted).toContain("Model access is disabled.");
+  });
+
+  test("settled DEC answers appear inline in feature markdown and follow-up Goldfish prompts avoid looping", async () => {
+    const promptRound1 = buildGoldfishPrompt({
+      featureCode: "F-01",
+      title: "Add login page",
+      personaLabel: "Security & Trust",
+      challengeFocus: "Trust boundaries",
+      round: 0,
+      isReassessment: false,
+    });
+    expect(promptRound1).toContain("Attack feature F-01");
+
+    const promptFollowUp = buildGoldfishPrompt({
+      featureCode: "F-01",
+      title: "Add login page",
+      personaLabel: "Security & Trust",
+      challengeFocus: "Trust boundaries",
+      round: 1,
+      isReassessment: false,
+    });
+    expect(promptFollowUp).toContain("Follow-up verification (round 2)");
+    expect(promptFollowUp).toContain("out of scope");
+
+    const u = await newUser("resolve-batch");
+    const p = await newProject(u, "Batch Resolve");
+    const created = await call(`/api/projects/${p.id}/cards`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+      body: { title: "Login page", summary: "Add login form calling existing endpoint.", writePaths: ["src/"] },
+    });
+    const cardId = created.json.card.id as string;
+    const round1 = await call(`/api/projects/${p.id}/cards/${cardId}/interview`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+      body: { message: "Add a login page for forum-web." },
+    });
+    expect(round1.json.card.goldfishSatisfied).toBe(false);
+    const dec = round1.json.card.decisions[0];
+    const r2 = await call(`/api/projects/${p.id}/cards/${cardId}/interview`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+      body: {
+        message: "Uniform 401/429 alert.",
+        decisionAnswers: [{ decisionId: dec.id, answerText: "Uniform 401/429 alert with zero browser storage" }],
+      },
+    });
+    const md = r2.json.card.draftMarkdown as string;
+    expect(md).toContain("RESOLVED: Uniform 401/429 alert with zero browser storage");
+
+    const openFindings = (r2.json.card.findings as Array<{ id: string; resolved: boolean }>).filter((f) => !f.resolved);
+    const patched = await call(`/api/projects/${p.id}/cards/${cardId}`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: {
+        writePaths: ["demo/forum-web/src/"],
+        resolveFindingIds: openFindings.map((f) => ({ findingId: f.id, note: "Resolved in batch" })),
+      },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.json.card.writePaths).toEqual(["demo/forum-web/src/"]);
+    expect(patched.json.card.goldfishSatisfied).toBe(true);
+    expect(buildFeatureMarkdown({
+      project: created.json.card.projectId ? { ...p, ownerId: "u", slug: p.slug, name: "Batch Resolve", description: "", sourceKind: "empty", sourceRef: null, activeReleaseId: null, activeReleaseVersion: "0.1.0", activeReleaseTitle: "First", githubVaultKeyId: null, openshellSummary: null, createdAt: "", updatedAt: "" } : undefined as never,
+      release: { version: "0.1.0", title: "First" },
+      card: patched.json.card,
+      sequence: 1,
+    })).toContain("demo/forum-web/src/");
   });
 });
 

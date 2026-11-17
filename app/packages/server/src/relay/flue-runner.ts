@@ -348,15 +348,33 @@ export async function runElephantInterviewTurn(params: {
   };
 }
 
+// Distinguishes initial adversarial discovery from follow-up / reassessment verification.
+export function buildGoldfishPrompt(params: {
+  featureCode: string;
+  title: string;
+  personaLabel: string;
+  challengeFocus: string;
+  round: number;
+  isReassessment?: boolean;
+}): string {
+  const { featureCode, title, personaLabel, challengeFocus, round, isReassessment } = params;
+  if (round >= 1 || isReassessment) {
+    const phase = isReassessment ? "Final reassessment" : `Follow-up verification (round ${round + 1})`;
+    return `${phase} for ${featureCode} (${title}) through the ${personaLabel} lens (${challengeFocus}). Check whether Owner Clarifications, settled RESOLVED decisions, and write_paths already resolve prior objections. Do NOT demand capabilities the owner marked out of scope or emit [BLOCKER]/[MAJOR] for minor polish or copy choices (use [NIT] only if non-blocking, or reply ONLY with 'SATISFIED: 0 blockers, 0 major gaps.' when the declared scope and negative controls hold). Emit [BLOCKER] or [MAJOR] only for genuine remaining security vulnerabilities, layer contradictions, or missing critical refusal behavior.`;
+  }
+  return `Attack feature ${featureCode} (${title}) strictly through the ${personaLabel} lens (${challengeFocus}). If the brief, Owner Clarifications, Settled Design Decisions, write_paths, and negative-control Verification already settle your lens without gaps or contradictions, respond ONLY with 'SATISFIED: 0 blockers, 0 major gaps.' Otherwise list concise concrete findings prefixed with [BLOCKER], [MAJOR], or [NIT].`;
+}
+
 export async function runGoldfishSwarm(params: {
   project: ProjectRecord;
   card: TableauCard;
   personas: GoldfishPersonaId[];
   mixer: Partial<Record<AgentRoleId, ModelAssignment>>;
   ctx: { db: Database; rootKey: Buffer; user: StoredUserRecord };
+  isReassessment?: boolean;
   onEvent?: (evt: Record<string, unknown>) => void;
 }): Promise<{ findings: GoldfishFinding[]; modelByPersona: Record<string, string> }> {
-  const { project, card, personas, mixer, ctx, onEvent } = params;
+  const { project, card, personas, mixer, ctx, isReassessment, onEvent } = params;
   const activePersonas = GOLDFISH_PERSONAS.filter((p) => personas.includes(p.id));
   const modelByPersona: Record<string, string> = {};
 
@@ -415,7 +433,14 @@ export async function runGoldfishSwarm(params: {
         assignment,
         persona: PERSONA_UPSTREAM_FILE[p.id],
         // Notice: Goldfish gets ZERO conversation history and ZERO sandbox tools
-        message: `Attack feature ${card.featureCode} (${card.title}) strictly through the ${p.label} lens (${p.challengeFocus}). If the brief, Owner Clarifications, Settled Design Decisions, write_paths, and negative-control Verification already settle your lens without gaps or contradictions, respond ONLY with 'SATISFIED: 0 blockers, 0 major gaps.' Otherwise list concise concrete findings prefixed with [BLOCKER], [MAJOR], or [NIT].`,
+        message: buildGoldfishPrompt({
+          featureCode: card.featureCode,
+          title: card.title,
+          personaLabel: p.label,
+          challengeFocus: p.challengeFocus,
+          round: card.goldfishRound,
+          isReassessment,
+        }),
         blocks: [
           {
             tag: "persona_lens",

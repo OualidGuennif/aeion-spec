@@ -149,10 +149,10 @@ export function buildFeatureMarkdown(params: {
     (d) => !d.resolved || (!d.answerText && !d.chosenOption),
   );
   const decisionsSummaryText = card.decisions
-    .map(
-      (d) =>
-        `- **${d.id}**: ${d.question} -> *${d.resolved ? "RESOLVED" : "PENDING"}*`,
-    )
+    .map((d) => {
+      const resolution = (d.answerText || d.chosenOption || "").replace(/\s+/g, " ").trim();
+      return `- **${d.id}**: ${d.question} -> *${d.resolved ? `RESOLVED: ${resolution || "Confirmed"}` : "PENDING"}*`;
+    })
     .join("\n");
 
   const ownerClarifications = card.messages

@@ -68,7 +68,9 @@ active sheets, and immutable release history entries.
 - The stored theme (`aeion-theme`: light, night, auto) is applied before first paint, so there is no flash.
 - Before round 1 runs, the drawer shows the Goldfish swarm status as not started rather than flagging open
   questions; failed requests show their error where the action was taken (the seal error inside its dialog,
-  the workspace error in a banner). An interview stream that ends without `complete` is an error.
+  the workspace error in a banner). An interview stream that ends without `complete` is an error. Open Goldfish
+  challenges offer a single-click `Resolve all` action that batches resolutions via `PATCH /cards/:cardId`, and the
+  `Spec` tab lets the owner narrow `write_paths`.
 - A guest vault reads "sealed in memory", never "sealed at rest"; archived cards open read-only.
 - At 760 px and below, the top bar scrolls away instead of staying pinned, stage tabs scroll smoothly, data
   tables stack cleanly, and interactive controls meet a 44 px minimum hit target.
