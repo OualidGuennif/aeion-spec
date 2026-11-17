@@ -6,6 +6,8 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-17
+
 - Added one-click `Resolve all` for open Goldfish challenges and inline `write_paths` editing in the
   `Spec` tab (`CardStudioDrawer.tsx`), rendered settled `DEC-*` answers inline in `buildFeatureMarkdown`,
   and scoped follow-up/reassessment Goldfish rounds so clarified specs converge instead of looping.
