@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   GOLDFISH_PERSONAS,
   OBSERVABILITY_MAX_BYTES,
+  validateRelativeWritePaths,
   type FindingSeverity,
   type GoldfishFinding,
   type GoldfishPersonaId,
@@ -121,10 +122,11 @@ export function CardStudioDrawer({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const readOnly = card.column === "archived";
+  const writePathsValue = card.writePaths.join(", ");
 
   useEffect(() => {
-    setWritePathsDraft(card.writePaths.join(", "));
-  }, [card.id, card.writePaths]);
+    setWritePathsDraft(writePathsValue);
+  }, [card.id, writePathsValue]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -273,13 +275,15 @@ export function CardStudioDrawer({
 
   const saveWritePaths = (e: FormEvent) => {
     e.preventDefault();
-    const writePaths = writePathsDraft
+    const rawPaths = writePathsDraft
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (writePaths.length === 0) return setError("Enter at least one relative write path.");
+    if (rawPaths.length === 0) return setError("Enter at least one relative write path.");
+    const verdict = validateRelativeWritePaths(rawPaths);
+    if (!verdict.ok) return setError(verdict.error);
     return callCard(
-      () => unwrap(cardApi().patch({ writePaths })),
+      () => unwrap(cardApi().patch({ writePaths: verdict.paths })),
       "The write scope could not be updated.",
     );
   };

@@ -292,3 +292,21 @@ export interface BuilderSpecPayload {
     byteCount: number;
   }>;
 }
+
+// Trims and validates relative write_paths without leading /, traversal, or backslashes.
+export function validateRelativeWritePaths(
+  paths: readonly string[],
+): { ok: true; paths: string[] } | { ok: false; error: string } {
+  const normalized: string[] = [];
+  for (const raw of paths) {
+    const p = raw.trim();
+    if (!p || p.startsWith("/") || p.includes("..") || p.includes("\\")) {
+      return {
+        ok: false,
+        error: "Invalid write_paths: relative paths without leading '/', '..', or '\\' are required.",
+      };
+    }
+    normalized.push(p);
+  }
+  return { ok: true, paths: normalized };
+}

@@ -86,8 +86,9 @@ HMAC-SHA256 release digests, and 8-section Observability feature manifests (`<= 
 - `/api/health` reports the version from the repository's `VERSION` file.
 - A slug is unique per owner; the default Model Mixer picks providers the owner holds a key for; a vault
   key of another purpose or provider is refused for a role; for OpenCode Go keys, the relay discovers the
-  account's enabled `/v1/models` list and heals disabled role assignments. `exporter.ts` renders settled
-  `DEC-*` answers inline under `Decision Status`.
+  account's enabled `/v1/models` list and heals disabled role assignments. `exporter.ts` renders bounded
+  settled `DEC-*` answers inline under `Decision Status`, and card create/patch refuses invalid `write_paths`
+  (leading `/`, `..`, `\`, or blank entries) with 400.
 
 ## Determinism
 
