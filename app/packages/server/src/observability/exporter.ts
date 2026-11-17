@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   OBSERVABILITY_MAX_BYTES,
+  validateRelativeWritePaths,
   type ObservabilityExportBundle,
   type ObservabilityFeatureValidation,
   type ProjectRecord,
@@ -149,10 +150,13 @@ export function buildFeatureMarkdown(params: {
     (d) => !d.resolved || (!d.answerText && !d.chosenOption),
   );
   const decisionsSummaryText = card.decisions
-    .map(
-      (d) =>
-        `- **${d.id}**: ${d.question} -> *${d.resolved ? "RESOLVED" : "PENDING"}*`,
-    )
+    .map((d) => {
+      const q = trimBoundary(d.question, 220).replace(/`/g, "'");
+      const rawAns = d.answerText || d.chosenOption || "";
+      const resolution = trimBoundary(rawAns, 240).replace(/`/g, "'");
+      const tag = d.resolved ? `\`RESOLVED: ${resolution || "Confirmed"}\`` : "`PENDING`";
+      return `- **${d.id}**: ${q} -> ${tag}`;
+    })
     .join("\n");
 
   const ownerClarifications = card.messages
@@ -219,10 +223,10 @@ export function buildFeatureMarkdown(params: {
 
   const positiveWitness = `Valid ${card.title} execution completes deterministically within declared bounds inside ${writePaths.join(", ")} and passes acceptance assertions.`;
   const settledVerificationRules = settledDecisions
-    .map((d) => `${d.id}: ${(d.answerText || d.chosenOption || "").replace(/\s+/g, " ").trim()}`)
+    .map((d) => `${d.id}: ${trimBoundary(d.answerText || d.chosenOption || "", 240)}`)
     .join("; ");
   const negativeControl = settledVerificationRules
-    ? `${settledVerificationRules} Out-of-bounds or invalid inputs fail closed cleanly without mutating state outside declared scope.`
+    ? `${trimBoundary(settledVerificationRules, 1600)} Out-of-bounds or invalid inputs fail closed cleanly without mutating state outside declared scope.`
     : pendingDecisions.length > 0
       ? `Pending decision settlement (${pendingDecisions.map((d) => d.id).join(", ")}): invalid or unauthorized inputs fail closed cleanly without mutating persistent state.`
       : `Invalid, resource-exceeded, or malformed input fails closed with explicit non-zero refusal signaling and zero out-of-scope state mutation.`;
@@ -240,20 +244,39 @@ export function buildFeatureMarkdown(params: {
 
   let markdown = `---\n${fmLines.join("\n")}\n---\n\n${sections.join("\n\n")}\n`;
   if (Buffer.byteLength(markdown, "utf8") > OBSERVABILITY_MAX_BYTES) {
-    // Deterministic compaction preserving required sections + Delivery Steps + negative control
-    const compactConstraints = findingsText
-      ? findingsText.split("\n").slice(0, 8).join("\n")
-      : "";
-    const compacted = sections.map((sec) => {
-      if (sec.startsWith("## Constraints & Invariants") && compactConstraints) {
-        return `## Constraints & Invariants\n\n${invariantsLead}\n\nAdversarial Goldfish Constraints (top findings):\n${compactConstraints}`;
-      }
-      if (sec.startsWith("## Intent")) {
-        return `## Intent\n\nFeature \`${card.featureCode}\` for **${project.name}** (release \`${release.version}\`).\n\n${trimBoundary(card.summary, 1200)}`;
-      }
-      return sec;
-    });
-    markdown = `---\n${fmLines.join("\n")}\n---\n\n${compacted.join("\n\n")}\n`;
+    // Deterministic compaction preserving required sections, Delivery Steps, and negative control
+    for (const [decLimit, findLimit, verifLimit] of [
+      [8, 8, 600],
+      [4, 4, 300],
+      [2, 2, 160],
+    ] as const) {
+      const compactDecisions = decisionsSummaryText
+        ? decisionsSummaryText.split("\n").slice(0, decLimit).join("\n")
+        : "";
+      const compactConstraints = findingsText
+        ? findingsText.split("\n").slice(0, findLimit).join("\n")
+        : "";
+      const compactNeg = settledVerificationRules
+        ? `${trimBoundary(settledVerificationRules, verifLimit)} Out-of-bounds or invalid inputs fail closed cleanly without mutating state outside declared scope.`
+        : negativeControl;
+      const compacted = sections.map((sec) => {
+        if (sec.startsWith("## Intent")) {
+          return `## Intent\n\nFeature \`${card.featureCode}\` for **${project.name}** (release \`${release.version}\`).\n\n${trimBoundary(card.summary, 1200)}`;
+        }
+        if (sec.startsWith("## Data Sources")) {
+          return `## Data Sources\n\n${dataSourcesBody}${compactDecisions ? `\n\nDecision Status:\n${compactDecisions}` : ""}`;
+        }
+        if (sec.startsWith("## Constraints & Invariants") && compactConstraints) {
+          return `## Constraints & Invariants\n\n${invariantsLead}\n\nAdversarial Goldfish Constraints (top findings):\n${compactConstraints}`;
+        }
+        if (sec.startsWith("## Verification")) {
+          return `## Verification\n\n- **Positive witness**: ${positiveWitness}\n- **Negative control (Rule 1)**: ${compactNeg}`;
+        }
+        return sec;
+      });
+      markdown = `---\n${fmLines.join("\n")}\n---\n\n${compacted.join("\n\n")}\n`;
+      if (Buffer.byteLength(markdown, "utf8") <= OBSERVABILITY_MAX_BYTES) break;
+    }
   }
   return markdown;
 }
@@ -306,14 +329,7 @@ export function validateObservabilityMarkdown(
     errors.push("Rule 1 violation: Verification lacks an explicit negative-control refusal case.");
   }
 
-  const writePathsValid =
-    card.writePaths.every(
-      (p) =>
-        p.length > 0 &&
-        !p.startsWith("/") &&
-        !p.includes("..") &&
-        !p.includes("\\"),
-    );
+  const writePathsValid = validateRelativeWritePaths(card.writePaths).ok;
   if (!writePathsValid) {
     errors.push("Invalid write_paths: relative paths without traversal are required.");
   }

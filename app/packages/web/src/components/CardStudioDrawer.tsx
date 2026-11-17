@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   GOLDFISH_PERSONAS,
   OBSERVABILITY_MAX_BYTES,
+  validateRelativeWritePaths,
   type FindingSeverity,
   type GoldfishFinding,
   type GoldfishPersonaId,
@@ -113,6 +114,7 @@ export function CardStudioDrawer({
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [message, setMessage] = useState("");
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
+  const [writePathsDraft, setWritePathsDraft] = useState(card.writePaths.join(", "));
   const [copiedSpec, setCopiedSpec] = useState<"idle" | "copied" | "failed">("idle");
   const [busy, setBusy] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
@@ -120,6 +122,11 @@ export function CardStudioDrawer({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const readOnly = card.column === "archived";
+  const writePathsValue = card.writePaths.join(", ");
+
+  useEffect(() => {
+    setWritePathsDraft(writePathsValue);
+  }, [card.id, writePathsValue]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -251,6 +258,35 @@ export function CardStudioDrawer({
         ),
       "The challenge could not be marked resolved.",
     );
+
+  const resolveAllFindings = () =>
+    callCard(
+      () =>
+        unwrap(
+          cardApi().patch({
+            resolveFindingIds: openFindings.map((f) => ({
+              findingId: f.id,
+              note: "Resolved by the owner in Spec Studio.",
+            })),
+          }),
+        ),
+      "The challenges could not be marked resolved.",
+    );
+
+  const saveWritePaths = (e: FormEvent) => {
+    e.preventDefault();
+    const rawPaths = writePathsDraft
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (rawPaths.length === 0) return setError("Enter at least one relative write path.");
+    const verdict = validateRelativeWritePaths(rawPaths);
+    if (!verdict.ok) return setError(verdict.error);
+    return callCard(
+      () => unwrap(cardApi().patch({ writePaths: verdict.paths })),
+      "The write scope could not be updated.",
+    );
+  };
 
   const copyMarkdown = async () => {
     if (!card.draftMarkdown) return;
@@ -475,7 +511,19 @@ export function CardStudioDrawer({
 
               {openFindings.length > 0 && (
                 <section className="studio-section">
-                  <h3>Open Goldfish challenges ({openFindings.length})</h3>
+                  <div className="section-head">
+                    <h3>Open Goldfish challenges ({openFindings.length})</h3>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={busy}
+                        onClick={() => void resolveAllFindings()}
+                      >
+                        Resolve all
+                      </button>
+                    )}
+                  </div>
                   <ul className="plain-list">
                     {openFindings.map((f) => (
                       <FindingRow key={f.id} finding={f} busy={busy} readOnly={readOnly} onResolve={resolveFinding} />
@@ -654,6 +702,24 @@ export function CardStudioDrawer({
                 max={OBSERVABILITY_MAX_BYTES}
                 aria-label="Spec size"
               />
+              {!readOnly && (
+                <form onSubmit={saveWritePaths} className="scope-form">
+                  <div className="field">
+                    <label htmlFor="drawer-write-paths">Write scope (comma-separated relative paths)</label>
+                    <input
+                      id="drawer-write-paths"
+                      className="input mono"
+                      value={writePathsDraft}
+                      disabled={busy}
+                      onChange={(e) => setWritePathsDraft(e.target.value)}
+                      placeholder="src/"
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-sm" disabled={busy}>
+                    Save scope
+                  </button>
+                </form>
+              )}
               <pre className="code-block">
                 {card.draftMarkdown || "The feature Markdown draft appears after round 1."}
               </pre>

@@ -1446,6 +1446,26 @@ textarea {
   gap: 10px;
 }
 
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scope-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.scope-form .field {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 .studio-section + .studio-section {
   padding-top: 14px;
   border-top: 1px solid var(--border-subtle);

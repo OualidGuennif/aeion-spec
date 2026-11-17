@@ -21,6 +21,7 @@ import {
   StoreVaultKeySchema,
   UpdateCardSchema,
   UpdateReleaseMetaSchema,
+  validateRelativeWritePaths,
   ValidateReleaseSchema,
   type AgentRoleId,
   type ModelAssignment,
@@ -524,6 +525,11 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         set.status = 404;
         return { error: "Project not found." };
       }
+      const pathsVerdict = validateRelativeWritePaths(body.writePaths ?? []);
+      if (!pathsVerdict.ok) {
+        set.status = 400;
+        return { error: pathsVerdict.error };
+      }
       const release = getActiveRelease(project.id, project.activeReleaseId, ctx.db);
       const card = StoreRepository.createCard(ctx.db, {
         projectId: project.id,
@@ -533,7 +539,7 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         area: body.area ?? "foundation",
         phase: body.phase ?? "P1",
         size: body.size ?? "M",
-        writePaths: body.writePaths ?? [],
+        writePaths: pathsVerdict.paths,
         dependsOn: body.dependsOn ?? [],
       });
       return { card };
@@ -550,12 +556,19 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         return { error: "Project not found." };
       }
       const { release, card } = requireActiveCard(ctx.db, project, params.cardId);
+      if (body.writePaths !== undefined) {
+        const pathsVerdict = validateRelativeWritePaths(body.writePaths);
+        if (!pathsVerdict.ok) {
+          set.status = 400;
+          return { error: pathsVerdict.error };
+        }
+        card.writePaths = pathsVerdict.paths;
+      }
       if (body.title !== undefined) card.title = body.title.trim();
       if (body.summary !== undefined) card.summary = body.summary.trim();
       if (body.area !== undefined) card.area = body.area.trim();
       if (body.phase !== undefined) card.phase = body.phase.trim();
       if (body.size !== undefined) card.size = body.size;
-      if (body.writePaths !== undefined) card.writePaths = body.writePaths;
       if (body.dependsOn !== undefined) card.dependsOn = body.dependsOn;
       if (body.resolveFindingIds) {
         for (const item of body.resolveFindingIds) {

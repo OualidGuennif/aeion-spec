@@ -435,6 +435,7 @@ export async function runAutomatedReviewPipeline(params: {
     personas: ["security", "architecture", "sre"],
     mixer,
     ctx,
+    isReassessment: true,
   });
 
   const mechanicalErrors = [

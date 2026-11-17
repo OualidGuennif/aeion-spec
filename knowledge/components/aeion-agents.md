@@ -88,7 +88,9 @@ Structured text, typed tool payloads (`anchor_hypothesis`, `submit_review`), tok
   ephemeral single-run `AEION_RELAY_TOKEN` bound to loopback `ContextRelay`, which forwards `x-aeion-session-id`
   to `litellm_bridge.py` (`x-opencode-session` for OpenCode Go) with `X-Aeion-Bridge-Secret` verification.
 - Loopback URL checks reject non-loopback `AEION_RELAY_URL` targets before any model call.
-- Every Goldfish turn runs with zero conversation history (fresh isolated context).
+- Every Goldfish turn runs with zero conversation history (fresh isolated context); follow-up and
+  reassessment prompts (`buildGoldfishPrompt`) direct each lens to verify settled decisions and declared
+  scope rather than re-emitting out-of-scope blockers across rounds.
 - Automated review requires cross-family separation between interview models and `reviewer` when
   multiple providers/families are configured.
 - The review fails closed: a missing or malformed `submit_review` verdict reads as "revise", and every
