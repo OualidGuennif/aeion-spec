@@ -25,6 +25,7 @@ import {
   ValidateReleaseSchema,
   type AgentRoleId,
   type ModelAssignment,
+  type TableauCard,
 } from "@aeion-spec/shared";
 import {
   AuthConflictError,
@@ -62,6 +63,7 @@ import {
 import { discoverOpenCodeGoModels } from "./relay/context-relay.ts";
 import { MissingVaultCredentialError } from "./relay/flue-runner.ts";
 import {
+  applyDecisionAnswers,
   computeMixerConfig,
   evaluateSatisfaction,
   invalidateReview,
@@ -157,6 +159,42 @@ async function whileCardInFlight<T>(cardId: string, run: () => Promise<T>): Prom
   } finally {
     cardsInFlight.delete(cardId);
   }
+}
+
+// Streams progress + final card payload over SSE so long runs avoid blocking HTTP timeouts.
+function sseCardStream(
+  cardId: string,
+  failureLabel: string,
+  run: (emit: (evt: Record<string, unknown>) => void) => Promise<TableauCard>,
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const push = (eventName: string, data: unknown) => {
+        controller.enqueue(
+          encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`),
+        );
+      };
+      try {
+        const updated = await whileCardInFlight(cardId, () =>
+          run((evt) => push("progress", evt)),
+        );
+        push("complete", { card: updated });
+      } catch (err) {
+        push("error", {
+          error: err instanceof Error ? err.message : failureLabel,
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+    },
+  });
 }
 
 // A card the caller may change: in this project, in the active release, not archived unless asked,
@@ -570,6 +608,9 @@ export const app = new Elysia({ name: "aeion-spec-api" })
       if (body.phase !== undefined) card.phase = body.phase.trim();
       if (body.size !== undefined) card.size = body.size;
       if (body.dependsOn !== undefined) card.dependsOn = body.dependsOn;
+      if (body.decisionAnswers !== undefined) {
+        applyDecisionAnswers(card, body.decisionAnswers);
+      }
       if (body.resolveFindingIds) {
         for (const item of body.resolveFindingIds) {
           const f = card.findings.find((x) => x.id === item.findingId);
@@ -654,44 +695,18 @@ export const app = new Elysia({ name: "aeion-spec-api" })
       }
       const { release, card } = requireActiveCard(ctx.db, project, params.cardId);
       if (card.column === "idea") card.column = "goldfish_interview";
-
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
-        async start(controller) {
-          const push = (eventName: string, data: unknown) => {
-            controller.enqueue(
-              encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`),
-            );
-          };
-          try {
-            const updated = await whileCardInFlight(card.id, () =>
-              startOrContinueInterview({
-                ctx,
-                project,
-                release,
-                card,
-                userMessage: body.message,
-                decisionAnswers: body.decisionAnswers,
-                personas: body.personas,
-                onEvent: (evt) => push("progress", evt),
-              }),
-            );
-            push("complete", { card: updated });
-          } catch (err) {
-            push("error", {
-              error: err instanceof Error ? err.message : "Interview failed",
-            });
-          } finally {
-            controller.close();
-          }
-        },
-      });
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-        },
-      });
+      return sseCardStream(card.id, "Interview failed", (onEvent) =>
+        startOrContinueInterview({
+          ctx,
+          project,
+          release,
+          card,
+          userMessage: body.message,
+          decisionAnswers: body.decisionAnswers,
+          personas: body.personas,
+          onEvent,
+        }),
+      );
     },
     { body: InterviewTurnSchema },
   )
@@ -748,6 +763,32 @@ export const app = new Elysia({ name: "aeion-spec-api" })
       }),
     );
     return { card: updated };
+  })
+  .post("/api/projects/:projectId/cards/:cardId/review/stream", ({ request, params, set }) => {
+    const ctx = requireAuthContext(request.headers, { requireCsrf: true });
+    const project = StoreRepository.getProject(ctx.db, ctx.user.id, params.projectId);
+    if (!project) {
+      set.status = 404;
+      return { error: "Project not found." };
+    }
+    const { release, card } = requireActiveCard(ctx.db, project, params.cardId);
+    if (!card.goldfishSatisfied || !card.userSatisfied) {
+      throw new WorkflowGateError(
+        `${card.featureCode} needs both the swarm and the owner satisfied before its review runs.`,
+      );
+    }
+    return sseCardStream(card.id, "Automated review failed", (onEvent) =>
+      card.column === "automated_review" || card.column === "validated"
+        ? runAutomatedReviewPipeline({ ctx, project, release, card, onEvent })
+        : transitionTableauCard({
+            ctx,
+            project,
+            release,
+            card,
+            targetColumn: "automated_review",
+            onEvent,
+          }),
+    );
   })
   // Release Metadata, Validate ("Clean the Sheet"), and Historical Releases Vault
   .patch(

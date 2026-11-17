@@ -440,6 +440,55 @@ describe("Card lifecycle gates", () => {
     });
     expect(review.status).toBe(409);
     expect(String(review.json.error)).toContain("satisfied");
+
+    const streamUnready = await call(`/api/projects/${p.id}/cards/${card.json.card.id}/review/stream`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+    });
+    expect(streamUnready.status).toBe(409);
+  });
+
+  test("PATCH updates settled decision answers cleanly and review/stream emits progress to completion", async () => {
+    const u = await newUser("stream-review");
+    const p = await newProject(u, "Stream Review");
+    const cardId = await satisfiedCard(u, p.id);
+
+    const tab = await call(`/api/projects/${p.id}/tableau`, { session: u.session });
+    const targetCard = tab.json.cards.find((c: TableauCard) => c.id === cardId) as TableauCard;
+    const dec = targetCard.decisions[0]!;
+
+    // Owner updates an already-settled DEC answer directly without re-running an interview round.
+    const edited = await call(`/api/projects/${p.id}/cards/${cardId}`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: {
+        decisionAnswers: [{ decisionId: dec.id, answerText: "Uniform 401/429 alert with zero browser storage" }],
+      },
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.json.card.draftMarkdown).toContain("RESOLVED: Uniform 401/429 alert with zero browser storage");
+
+    const streamRes = await app.handle(
+      new Request(`http://127.0.0.1/api/projects/${p.id}/cards/${cardId}/review/stream`, {
+        method: "POST",
+        headers: { "x-aeion-session": u.session, "x-aeion": "1", "x-csrf-token": u.csrf },
+      }),
+    );
+    expect(streamRes.status).toBe(200);
+    expect(streamRes.headers.get("content-type")).toContain("text/event-stream");
+    const bodyText = await streamRes.text();
+    expect(bodyText).toContain("event: progress");
+    expect(bodyText).toContain("event: complete");
+    const completeLine = bodyText
+      .split("\n\n")
+      .find((f) => f.includes("event: complete"))
+      ?.match(/^data:\s*(.+)$/m)?.[1];
+    expect(completeLine).toBeDefined();
+    const payload = JSON.parse(completeLine!) as { card: TableauCard };
+    expect(payload.card.column).toBe("automated_review");
+    expect(payload.card.reviewPassed).toBe(true);
   });
 
   test("changed content sends a reviewed or validated card back to the interview", () => {

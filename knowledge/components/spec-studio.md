@@ -14,6 +14,12 @@ sources:
     title: "Monochrome + warm-stone design tokens (light and dark, AA-checked pairs) and the one shared stylesheet"
   - resource: ../../app/packages/web/src/lib/api.ts
     title: "Type-safe Eden Treaty client for Elysia API"
+  - resource: ../../app/packages/web/src/lib/proxy.ts
+    title: "Streaming App Router API proxy (5-minute timeout, Set-Cookie and SSE passthrough)"
+  - resource: ../../app/packages/web/src/app/api/[...path]/route.ts
+    title: "Next.js App Router proxy for /api/* routes"
+  - resource: ../../app/packages/web/src/app/v1/[...path]/route.ts
+    title: "Next.js App Router proxy for /v1/* Builder routes"
   - resource: ../../app/packages/server/src/observability/exporter.ts
     title: "8-section feature markdown compiler and Observability manifest builder"
   - resource: ../../app/packages/server/profiles/aeion-observability.json
@@ -68,9 +74,11 @@ active sheets, and immutable release history entries.
 - The stored theme (`aeion-theme`: light, night, auto) is applied before first paint, so there is no flash.
 - Before round 1 runs, the drawer shows the Goldfish swarm status as not started rather than flagging open
   questions; failed requests show their error where the action was taken (the seal error inside its dialog,
-  the workspace error in a banner). An interview stream that ends without `complete` is an error. Open Goldfish
-  challenges offer a single-click `Resolve all` action that batches resolutions via `PATCH /cards/:cardId`, and the
-  `Spec` tab lets the owner narrow `write_paths`.
+  the workspace error in a banner). An interview or review stream that ends without `complete` is an error.
+  Open Goldfish challenges offer a single-click `Resolve all` action that batches resolutions via
+  `PATCH /cards/:cardId`, settled `DEC-*` answers stay inspectable and editable alongside feature brief and
+  `write_paths` inputs inside the two-column Feature Studio, and Next.js proxies `/api/*` and `/v1/*`
+  through a streaming Node App Router handler rather than `rewrites()`'s 30 s socket timeout.
 - A guest vault reads "sealed in memory", never "sealed at rest"; archived cards open read-only.
 - At 760 px and below, the top bar scrolls away instead of staying pinned, stage tabs scroll smoothly, data
   tables stack cleanly, and interactive controls meet a 44 px minimum hit target.

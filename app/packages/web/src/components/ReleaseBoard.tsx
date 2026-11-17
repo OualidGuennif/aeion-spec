@@ -19,7 +19,11 @@ interface ReleaseBoardProps {
   llmKeyCount: number;
   onOpenKeys: () => void;
   onRefresh: () => Promise<void>;
-  onSelectCard: (card: TableauCard, tab?: "interview" | "review" | "spec" | "axiom") => void;
+  onSelectCard: (
+    card: TableauCard,
+    tab?: "interview" | "review" | "spec" | "axiom",
+    autoStartReview?: boolean,
+  ) => void;
 }
 
 type BoardColumn = Exclude<TableauColumn, "archived">;
@@ -308,7 +312,9 @@ export function ReleaseBoard({
           <div className="panel-header">
             <div>
               <h2>New feature</h2>
-              <p className="muted">Starts at Step 1 (Ideas), then moves into a Goldfish interview when ready.</p>
+              <p className="muted">
+                Starts at Step 1 (Ideas). Write a clear goal and relative file scope so Round 1 needs fewer cycles.
+              </p>
             </div>
           </div>
           <div className="grid-2">
@@ -321,23 +327,26 @@ export function ReleaseBoard({
                 minLength={3}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Idempotent webhook settlement"
+                placeholder="Email and password login page"
               />
             </div>
             <div className="field">
-              <label htmlFor="idea-paths">Write paths (comma-separated)</label>
+              <label htmlFor="idea-paths">Files builders may touch (comma-separated)</label>
               <input
                 id="idea-paths"
                 className="input mono"
                 value={writePathsText}
                 onChange={(e) => setWritePathsText(e.target.value)}
-                placeholder="src/settlement/, tests/settlement/"
+                placeholder="src/app/login/, tests/login.test.ts"
               />
             </div>
           </div>
 
           <div className="field">
-            <label htmlFor="idea-summary">Problem and goal</label>
+            <label htmlFor="idea-summary">What should happen, who uses it, and what fails?</label>
+            <span className="hint">
+              Include inputs, success outcome, error codes (for example 401/429), and what is explicitly out of scope.
+            </span>
             <textarea
               id="idea-summary"
               className="textarea"
@@ -345,7 +354,7 @@ export function ReleaseBoard({
               minLength={10}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
-              placeholder="Describe what should happen, who uses it, and which failures matter."
+              placeholder="Unauthenticated users sign in with email and password via POST /api/auth/login. Valid credentials set the session cookie and redirect to /. Invalid or throttled requests show a uniform alert with zero state change. Out of scope: signup, MFA, password reset."
             />
           </div>
 
@@ -490,7 +499,7 @@ export function ReleaseBoard({
                         type="button"
                         className="btn btn-primary btn-sm"
                         disabled={busy}
-                        onClick={() => void moveCard(card.id, "automated_review", "review")}
+                        onClick={() => onSelectCard(card, "review", true)}
                       >
                         Send to review →
                       </button>
@@ -518,7 +527,7 @@ export function ReleaseBoard({
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        onClick={() => onSelectCard(card, "review")}
+                        onClick={() => onSelectCard(card, "review", true)}
                       >
                         Run review →
                       </button>

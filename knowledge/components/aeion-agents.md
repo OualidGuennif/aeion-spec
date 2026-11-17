@@ -58,7 +58,8 @@ never lets an agent hold plaintext API keys or write directly to source trees.
 ## Inputs
 
 One Bun subprocess per agent turn via `flue-runner.ts` (`elephant`, `goldfish`, `reviewer`, `drafter`,
-and specialist helpers). Structured evidence blocks, settled `DEC-*` decisions, and read-only OpenShell
+and specialist helpers). Structured evidence blocks, settled `DEC-*` decisions (shared via
+`DecisionAnswerItemSchema` between `InterviewTurnSchema` and `UpdateCardSchema`), and read-only OpenShell
 file slices enter via ContextRelay per-run input bundles.
 
 | Agent | Role | Tools | Skill |

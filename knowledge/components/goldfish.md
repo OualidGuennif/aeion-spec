@@ -36,9 +36,11 @@ owner interview messages, `DEC-*` answers, and read-only OpenShell slices.
 ## Inputs
 
 - Moving a card from `idea` to `goldfish_interview`, or posting an interview turn / SSE stream turn with
-  clarifications, settled `DEC-*` answers, and optional manual finding resolutions (`PATCH /cards/:cardId`).
-- Moving to `automated_review` (requires both `goldfishSatisfied` and `userSatisfied`), followed by move
-  to `validated`.
+  clarifications, settled `DEC-*` answers, and optional manual finding resolutions (`PATCH /cards/:cardId`,
+  including direct `decisionAnswers` edits via `applyDecisionAnswers()`).
+- Moving to `automated_review` (requires both `goldfishSatisfied` and `userSatisfied`) or invoking
+  `POST /api/projects/:projectId/cards/:cardId/review/stream` for SSE-progress review (`transitionTableauCard` /
+  `runAutomatedReviewPipeline`), followed by move to `validated`.
 
 ## Outputs
 
@@ -51,8 +53,9 @@ Deduplicated Goldfish findings (`BLOCKER`/`MAJOR`/`NIT`), extracted `DEC-*` owne
 - Every finding carries stable `GF-*` identity; owner clarifications and explicit resolutions mark prior
   matching findings resolved while re-evaluating remaining `BLOCKER` status before transition to review.
   A resolved finding that a later round raises again reopens.
-- Answering a `DEC-*` decision also confirms the card's unverified assumptions; the drawer says so next to
-  the decisions.
+- Answering a `DEC-*` decision via `applyDecisionAnswers()` (either inside an interview turn or directly via
+  `PATCH /cards/:cardId`) also confirms the card's unverified assumptions; the drawer lets owners both answer
+  open decisions and edit already settled `DEC-*` answers.
 - A reassessment lens that fails blocks the review instead of passing it; a failed review puts the card
   back in the column it came from.
 - An archived card can only be restored to `idea`.
