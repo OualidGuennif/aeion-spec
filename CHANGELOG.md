@@ -6,6 +6,8 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-18
+
 - Replaced Next.js `rewrites()` with streaming Node.js route handlers (`/api/[...path]`, `/v1/[...path]`)
   to prevent 30 s socket hangups (`Internal Server Error`), added SSE `POST .../review/stream` and editable
   `decisionAnswers` on `PATCH .../cards/:cardId`, and redesigned the Feature Studio drawer (`min(1160px, 95vw)`
