@@ -369,10 +369,16 @@ export function CardStudioDrawer({
   }, [readOnly, card.goldfishSatisfied, card.userSatisfied, projectId, card.id, csrfToken, onCardUpdated]);
 
   useEffect(() => {
-    if (autoStartReview && !didAutoReviewRef.current && card.goldfishSatisfied && card.userSatisfied && !readOnly) {
+    if (!autoStartReview || didAutoReviewRef.current || !card.goldfishSatisfied || !card.userSatisfied || readOnly) {
+      return;
+    }
+    // Defer via macrotask so React 19 Strict Mode cancels the setup before firing a doomed stream request.
+    const timer = window.setTimeout(() => {
+      if (!mountedRef.current || didAutoReviewRef.current) return;
       didAutoReviewRef.current = true;
       void runReview();
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [autoStartReview, card.goldfishSatisfied, card.userSatisfied, readOnly, runReview]);
 
   const toggleUserSatisfaction = (satisfied: boolean) =>
