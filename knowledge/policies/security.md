@@ -20,6 +20,8 @@ sources:
     title: "prompt-defense.py, which names this doc as its spec"
   - resource: ../../.gitleaksignore
     title: ".gitleaksignore, which names this doc as its spec"
+  - resource: ../../app/osv-scanner.toml
+    title: "Time-bounded OSV-Scanner dependency waivers approved by the owner"
 ---
 
 # Security
@@ -180,7 +182,9 @@ credentials. Loops never deploy, restart, migrate data or change a setting.
 
 - CI runs gitleaks, OSV-Scanner and Semgrep (and Trivy when there are images); a skipped job is
   not a pass; a real finding is never suppressed to get a green run. A verified false positive goes in
-  `.gitleaksignore` by its exact fingerprint, with a comment saying what the value is.
+  `.gitleaksignore` by its exact fingerprint, with a comment saying what the value is; an unpatched
+  upstream dependency advisory with an explicit owner waiver may carry a dated `ignoreUntil` entry
+  and reachability rationale in `app/osv-scanner.toml` until a patched version ships.
 - A pull request touching authentication, infrastructure, CI or secret handling gets
   `/claude-security` on its changes (skill `security-scan`); the outer loop scans the codebase
   weekly.
