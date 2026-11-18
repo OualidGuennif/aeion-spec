@@ -100,6 +100,12 @@ export const CreateCardSchema = t.Object({
   dependsOn: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 80 }))),
 });
 
+export const DecisionAnswerItemSchema = t.Object({
+  decisionId: t.String({ minLength: 1, maxLength: 80 }),
+  chosenOption: t.Optional(t.String()),
+  answerText: t.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }),
+});
+
 export const UpdateCardSchema = t.Object({
   title: t.Optional(t.String({ minLength: 3, maxLength: 140 })),
   summary: t.Optional(t.String({ minLength: 10, maxLength: 4000 })),
@@ -108,6 +114,7 @@ export const UpdateCardSchema = t.Object({
   size: t.Optional(t.Union([t.Literal("S"), t.Literal("M"), t.Literal("L")])),
   writePaths: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 200 }))),
   dependsOn: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 80 }))),
+  decisionAnswers: t.Optional(t.Array(DecisionAnswerItemSchema)),
   resolveFindingIds: t.Optional(
     t.Array(
       t.Object({
@@ -131,15 +138,7 @@ export const MoveCardSchema = t.Object({
 
 export const InterviewTurnSchema = t.Object({
   message: t.String({ minLength: 1, maxLength: 8000 }),
-  decisionAnswers: t.Optional(
-    t.Array(
-      t.Object({
-        decisionId: t.String(),
-        chosenOption: t.Optional(t.String()),
-        answerText: t.String({ minLength: 1, maxLength: 2000 }),
-      }),
-    ),
-  ),
+  decisionAnswers: t.Optional(t.Array(DecisionAnswerItemSchema)),
   personas: t.Optional(t.Array(GoldfishPersonaSchema)),
 });
 

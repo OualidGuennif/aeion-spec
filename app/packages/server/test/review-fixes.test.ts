@@ -17,6 +17,7 @@ import { ingestUploadedArchive, inviteSandboxCount, listSandboxFiles } from "../
 import { buildFeatureMarkdown, validateObservabilityMarkdown } from "../src/observability/exporter.ts";
 import { buildGoldfishPrompt, checkSubmission, formatFlueFailure, readReviewVerdict } from "../src/relay/flue-runner.ts";
 import { invalidateReview } from "../src/tableau/orchestrator.ts";
+import { forwardApiRequest } from "../../web/src/lib/proxy.ts";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 const PYTHON_BIN = resolve(REPO_ROOT, ".venv/bin/python");
@@ -440,6 +441,175 @@ describe("Card lifecycle gates", () => {
     });
     expect(review.status).toBe(409);
     expect(String(review.json.error)).toContain("satisfied");
+
+    const streamUnready = await call(`/api/projects/${p.id}/cards/${card.json.card.id}/review/stream`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+    });
+    expect(streamUnready.status).toBe(409);
+  });
+
+  test("PATCH updates settled decision answers cleanly and review/stream emits progress to completion", async () => {
+    const u = await newUser("stream-review");
+    const p = await newProject(u, "Stream Review");
+    const cardId = await satisfiedCard(u, p.id);
+
+    const tab = await call(`/api/projects/${p.id}/tableau`, { session: u.session });
+    const targetCard = tab.json.cards.find((c: TableauCard) => c.id === cardId) as TableauCard;
+    const dec = targetCard.decisions[0]!;
+
+    // Owner updates an already-settled DEC answer directly without re-running an interview round.
+    const edited = await call(`/api/projects/${p.id}/cards/${cardId}`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: {
+        decisionAnswers: [{ decisionId: dec.id, answerText: "Uniform 401/429 alert with zero browser storage" }],
+      },
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.json.card.draftMarkdown).toContain("RESOLVED: Uniform 401/429 alert with zero browser storage");
+
+    const streamRes = await app.handle(
+      new Request(`http://127.0.0.1/api/projects/${p.id}/cards/${cardId}/review/stream`, {
+        method: "POST",
+        headers: { "x-aeion-session": u.session, "x-aeion": "1", "x-csrf-token": u.csrf },
+      }),
+    );
+    expect(streamRes.status).toBe(200);
+    expect(streamRes.headers.get("content-type")).toContain("text/event-stream");
+    const bodyText = await streamRes.text();
+    expect(bodyText).toContain("event: progress");
+    expect(bodyText).toContain("event: complete");
+    const completeLine = bodyText
+      .split("\n\n")
+      .find((f) => f.includes("event: complete"))
+      ?.match(/^data:\s*(.+)$/m)?.[1];
+    expect(completeLine).toBeDefined();
+    const payload = JSON.parse(completeLine!) as { card: TableauCard };
+    expect(payload.card.column).toBe("automated_review");
+    expect(payload.card.reviewPassed).toBe(true);
+  });
+
+  test("PATCH refuses whitespace-only answers and unknown decision IDs without confirming assumptions", async () => {
+    const u = await newUser("dec-guards");
+    const p = await newProject(u, "Dec Guards");
+    const card = await call(`/api/projects/${p.id}/cards`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+      body: { title: "Guard decisions", summary: "Verify blank answerText and unknown decisionId fail closed." },
+    });
+    const cardId = card.json.card.id as string;
+    const round1 = await call(`/api/projects/${p.id}/cards/${cardId}/interview`, {
+      method: "POST",
+      session: u.session,
+      csrf: u.csrf,
+      body: { message: "Initial pass to seed decisions and assumptions." },
+    });
+    expect(round1.status).toBe(200);
+    const existingDecId = round1.json.card.decisions[0]!.id as string;
+
+    const blank = await call(`/api/projects/${p.id}/cards/${cardId}`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: { decisionAnswers: [{ decisionId: existingDecId, answerText: "   \n\t  " }] },
+    });
+    expect(blank.status).toBe(422);
+
+    const unknown = await call(`/api/projects/${p.id}/cards/${cardId}`, {
+      method: "PATCH",
+      session: u.session,
+      csrf: u.csrf,
+      body: { decisionAnswers: [{ decisionId: "DEC-DOES-NOT-EXIST", answerText: "Valid text" }] },
+    });
+    expect(unknown.status).toBe(400);
+
+    const checkTab = await call(`/api/projects/${p.id}/tableau`, { session: u.session });
+    const persisted = checkTab.json.cards.find((c: TableauCard) => c.id === cardId) as TableauCard;
+    expect(persisted.decisions.find((d) => d.id === existingDecId)?.resolved).toBe(false);
+  });
+
+  test("cancelling an SSE review stream early never aborts or rolls back the completed review", async () => {
+    const u = await newUser("sse-cancel");
+    const p = await newProject(u, "SSE Cancel");
+    const cardId = await satisfiedCard(u, p.id);
+
+    const streamRes = await app.handle(
+      new Request(`http://127.0.0.1/api/projects/${p.id}/cards/${cardId}/review/stream`, {
+        method: "POST",
+        headers: { "x-aeion-session": u.session, "x-aeion": "1", "x-csrf-token": u.csrf },
+      }),
+    );
+    expect(streamRes.status).toBe(200);
+    const reader = streamRes.body!.getReader();
+    const firstChunk = await reader.read();
+    expect(firstChunk.done).toBe(false);
+    // Simulate client disconnect right after receiving the first progress frame.
+    await reader.cancel();
+
+    // Wait briefly for in-flight mock review to complete and save without tripping ERR_INVALID_STATE rollback.
+    for (let i = 0; i < 40; i++) {
+      const tab = await call(`/api/projects/${p.id}/tableau`, { session: u.session });
+      const card = tab.json.cards.find((c: TableauCard) => c.id === cardId) as TableauCard;
+      if (card.reviewPassed && card.column === "automated_review") {
+        expect(card.latestReview?.verdict).toBe("approve");
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error("Expected cancelled SSE review to complete and persist in automated_review.");
+  });
+
+  test("forwardApiRequest enforces 413 body bounds for sized and chunked uploads and preserves Set-Cookie", async () => {
+    const oversizedHeaderRes = await forwardApiRequest(
+      new Request("http://127.0.0.1:4170/api/projects/p1/source/upload", {
+        method: "POST",
+        headers: { "content-length": String(106 * 1024 * 1024) },
+      }),
+      { targetOrigin: "http://127.0.0.1:1" },
+    );
+    expect(oversizedHeaderRes.status).toBe(413);
+
+    const srv = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        await req.arrayBuffer().catch(() => null);
+        const hdrs = new Headers({ "content-type": "application/json" });
+        hdrs.append("set-cookie", "a=1; HttpOnly; Path=/");
+        hdrs.append("set-cookie", "b=2; Path=/");
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: hdrs });
+      },
+    });
+    try {
+      const chunkedStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(64));
+          controller.enqueue(new Uint8Array(64));
+          controller.close();
+        },
+      });
+      const oversizedChunkRes = await forwardApiRequest(
+        new Request("http://127.0.0.1:4170/api/projects/p1/source/upload", {
+          method: "POST",
+          body: chunkedStream,
+          duplex: "half",
+        } as RequestInit & { duplex: "half" }),
+        { targetOrigin: `http://127.0.0.1:${srv.port}`, maxBodyBytes: 100 },
+      );
+      expect(oversizedChunkRes.status).toBe(413);
+
+      const okRes = await forwardApiRequest(new Request("http://127.0.0.1:4170/api/test"), {
+        targetOrigin: `http://127.0.0.1:${srv.port}`,
+      });
+      expect(okRes.status).toBe(200);
+      expect(okRes.headers.getSetCookie()).toEqual(["a=1; HttpOnly; Path=/", "b=2; Path=/"]);
+      expect(await okRes.json()).toEqual({ ok: true });
+    } finally {
+      await srv.stop(true);
+    }
   });
 
   test("changed content sends a reviewed or validated card back to the interview", () => {

@@ -6,6 +6,14 @@ dates them at release time. Spec: knowledge/policies/engineering.md
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-18
+
+- Replaced Next.js `rewrites()` with streaming Node.js route handlers (`/api/[...path]`, `/v1/[...path]`)
+  to prevent 30 s socket hangups (`Internal Server Error`), added SSE `POST .../review/stream` and editable
+  `decisionAnswers` on `PATCH .../cards/:cardId`, and redesigned the Feature Studio drawer (`min(1160px, 95vw)`
+  2-column workspace, 4-step workflow stepper, prominent Elephant prompt focus, editable settled `DEC-*`
+  decisions, inline Brief & Scope editing, and guided `+ New feature` inputs).
+
 ## [0.2.3] - 2026-11-17
 
 - Added one-click `Resolve all` for open Goldfish challenges and inline `write_paths` editing in the

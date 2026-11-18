@@ -224,6 +224,7 @@ export default function HomePage() {
 
   const [selectedCard, setSelectedCard] = useState<TableauCard | null>(null);
   const [drawerInitialTab, setDrawerInitialTab] = useState<"interview" | "review" | "spec" | "axiom">("interview");
+  const [drawerAutoReview, setDrawerAutoReview] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
 
   const clearWorkspace = useCallback(() => {
@@ -322,8 +323,13 @@ export default function HomePage() {
     }
   };
 
-  const openCard = (card: TableauCard, tab: "interview" | "review" | "spec" | "axiom" = "interview") => {
+  const openCard = (
+    card: TableauCard,
+    tab: "interview" | "review" | "spec" | "axiom" = "interview",
+    autoStartReview = false,
+  ) => {
     setDrawerInitialTab(tab);
+    setDrawerAutoReview(autoStartReview);
     setSelectedCard(card);
   };
 
@@ -503,12 +509,16 @@ export default function HomePage() {
 
       {selectedCard && activeProject && user && (
         <CardStudioDrawer
-          key={`${selectedCard.id}-${drawerInitialTab}`}
+          key={`${selectedCard.id}-${drawerInitialTab}-${drawerAutoReview ? "run" : "view"}`}
           csrfToken={user.csrfToken}
           projectId={activeProject.id}
           card={selectedCard}
           initialTab={drawerInitialTab}
-          onClose={() => setSelectedCard(null)}
+          autoStartReview={drawerAutoReview}
+          onClose={() => {
+            setDrawerAutoReview(false);
+            setSelectedCard(null);
+          }}
           onCardUpdated={(updated) => {
             setSelectedCard(updated);
             void refresh();

@@ -1,7 +1,7 @@
 // Spec: knowledge/components/spec-studio.md
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   GOLDFISH_PERSONAS,
   OBSERVABILITY_MAX_BYTES,
@@ -14,16 +14,19 @@ import {
 } from "@aeion-spec/shared";
 import { createApiClient, unwrap } from "../lib/api.ts";
 
+export type StudioTab = "interview" | "review" | "spec" | "axiom";
+
 interface CardStudioDrawerProps {
   csrfToken: string;
   projectId: string;
   card: TableauCard;
   initialTab?: StudioTab;
+  autoStartReview?: boolean;
   onClose: () => void;
   onCardUpdated: (card: TableauCard) => void;
 }
 
-type StudioTab = "interview" | "review" | "spec" | "axiom";
+type CardDecision = TableauCard["decisions"][number];
 
 const COLUMN_LABEL: Record<TableauColumn, string> = {
   idea: "Ideas",
@@ -42,6 +45,12 @@ const SEVERITY_BADGE: Record<FindingSeverity, string> = {
 const RISK_BADGE = { high: "badge-danger", medium: "badge-warn", low: "badge-neutral" } as const;
 const ASSUMPTION_BADGE = { unverified: "badge-warn", confirmed: "badge-emerald", rejected: "badge-danger" } as const;
 
+const REVIEW_STEPS = [
+  { id: "gates", label: "1. Observability & AxiomSpec G01-G14" },
+  { id: "reviewer", label: "2. Cross-family independent reviewer" },
+  { id: "reassessment", label: "3. Stage 5-9 Goldfish reassessment" },
+] as const;
+
 function personaLabel(id: string | null): string {
   return GOLDFISH_PERSONAS.find((p) => p.id === id)?.label ?? id ?? "";
 }
@@ -51,7 +60,7 @@ function errorText(err: unknown, fallback: string): string {
 }
 
 // The server answers a refused stream with JSON `{ error }`; plain text falls through unchanged.
-async function readErrorBody(res: Response): Promise<string> {
+async function readErrorBody(res: Response, fallbackStatusLabel: string): Promise<string> {
   const text = await res.text();
   try {
     const parsed = JSON.parse(text) as { error?: unknown };
@@ -59,7 +68,80 @@ async function readErrorBody(res: Response): Promise<string> {
   } catch {
     // Plain-text error response.
   }
-  return text || `The interview request failed (${res.status}).`;
+  return text || `${fallbackStatusLabel} (${res.status}).`;
+}
+
+// Shared SSE consumer for interview turns and automated reviews.
+async function consumeCardStream(params: {
+  url: string;
+  csrfToken: string;
+  body?: unknown;
+  signal?: AbortSignal;
+  fallbackStatusLabel: string;
+  incompleteError: string;
+  onProgress: (message: string, step?: string) => void;
+  onComplete: (card: TableauCard) => void;
+}): Promise<void> {
+  const headers: Record<string, string> = {
+    "X-Aeion": "1",
+    "X-CSRF-Token": params.csrfToken,
+  };
+  if (params.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(params.url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    signal: params.signal,
+    body: params.body !== undefined ? JSON.stringify(params.body) : undefined,
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(await readErrorBody(res, params.fallbackStatusLabel));
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const eventMatch = frame.match(/^event:\s*(.+)$/m);
+        const dataMatch = frame.match(/^data:\s*(.+)$/m);
+        if (!eventMatch || !dataMatch) continue;
+        let data: { card?: TableauCard; message?: string; step?: string; persona?: string; error?: string };
+        try {
+          data = JSON.parse(dataMatch[1]!);
+        } catch {
+          continue;
+        }
+        const evType = eventMatch[1]!.trim();
+        if (evType === "progress") {
+          const msg =
+            data.message || (data.persona ? `Goldfish (${personaLabel(data.persona)}) is reviewing...` : "Working...");
+          params.onProgress(msg, data.step);
+        } else if (evType === "complete" && data.card) {
+          completed = true;
+          params.onComplete(data.card);
+        } else if (evType === "error") {
+          throw new Error(data.error || params.incompleteError);
+        }
+      }
+    }
+    if (!completed) {
+      throw new Error(params.incompleteError);
+    }
+  } finally {
+    void reader.cancel().catch(() => undefined);
+  }
 }
 
 function FindingRow({
@@ -106,6 +188,7 @@ export function CardStudioDrawer({
   projectId,
   card,
   initialTab = "interview",
+  autoStartReview = false,
   onClose,
   onCardUpdated,
 }: CardStudioDrawerProps) {
@@ -113,16 +196,40 @@ export function CardStudioDrawer({
   const [selectedPersonas, setSelectedPersonas] = useState<GoldfishPersonaId[]>(card.activePersonas);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [message, setMessage] = useState("");
-  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
+  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, { chosenOption?: string; answerText: string }>>({});
+  const [editingDecisionId, setEditingDecisionId] = useState<string | null>(null);
+  const [settledChoiceDraft, setSettledChoiceDraft] = useState<string | undefined>(undefined);
+  const [settledAnswerDraft, setSettledAnswerDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState(card.summary);
   const [writePathsDraft, setWritePathsDraft] = useState(card.writePaths.join(", "));
+  const [showBriefEditor, setShowBriefEditor] = useState(
+    card.goldfishRound === 0 || Boolean(card.latestReview && !card.latestReview.passed),
+  );
+  const [showSwarmLogs, setShowSwarmLogs] = useState(false);
+  const [reviewStep, setReviewStep] = useState<string | null>(null);
   const [copiedSpec, setCopiedSpec] = useState<"idle" | "copied" | "failed">("idle");
   const [busy, setBusy] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const didAutoReviewRef = useRef(false);
+  const mountedRef = useRef(true);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const readOnly = card.column === "archived";
   const writePathsValue = card.writePaths.join(", ");
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    setSummaryDraft(card.summary);
+  }, [card.id, card.summary]);
 
   useEffect(() => {
     setWritePathsDraft(writePathsValue);
@@ -140,6 +247,26 @@ export function CardStudioDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
+  const cardApi = useCallback(
+    () => createApiClient(csrfToken).api.projects({ projectId }).cards({ cardId: card.id }),
+    [csrfToken, projectId, card.id],
+  );
+
+  const callCard = async (fn: () => Promise<{ card: TableauCard }>, fallback: string, then?: () => void) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fn();
+      if (!mountedRef.current) return;
+      onCardUpdated(res.card);
+      then?.();
+    } catch (err) {
+      if (mountedRef.current) setError(errorText(err, fallback));
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
+  };
+
   const togglePersona = (id: GoldfishPersonaId) => {
     setSelectedPersonas((prev) =>
       prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id],
@@ -149,89 +276,110 @@ export function CardStudioDrawer({
   const runInterviewTurn = async (e: FormEvent) => {
     e.preventDefault();
     const decisionAnswers = Object.entries(decisionDrafts)
-      .filter(([, text]) => text.trim().length > 0)
-      .map(([decisionId, answerText]) => ({ decisionId, answerText: answerText.trim() }));
+      .filter(([, draft]) => draft.answerText.trim().length > 0)
+      .map(([decisionId, draft]) => ({
+        decisionId,
+        chosenOption: draft.chosenOption,
+        answerText: draft.answerText.trim(),
+      }));
     if (!message.trim() && decisionAnswers.length === 0) return;
+
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     setError(null);
     setBusy(true);
+    setReviewStep(null);
     setStreamStatus("Connecting to Elephant and the Goldfish swarm...");
-
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
-      const res = await fetch(`/api/projects/${projectId}/cards/${card.id}/interview/stream`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-Aeion": "1", "X-CSRF-Token": csrfToken },
-        body: JSON.stringify({
+      await consumeCardStream({
+        url: `/api/projects/${projectId}/cards/${card.id}/interview/stream`,
+        csrfToken,
+        signal: controller.signal,
+        body: {
           message: message.trim() || "Reassess the settled decisions with fresh Goldfish contexts.",
           decisionAnswers,
           personas: selectedPersonas,
-        }),
+        },
+        fallbackStatusLabel: "The interview request failed",
+        incompleteError: "The interview stream ended before the round completed.",
+        onProgress: (msg) => {
+          if (mountedRef.current) setStreamStatus(msg);
+        },
+        onComplete: (updated) => {
+          if (!mountedRef.current) return;
+          onCardUpdated(updated);
+          setMessage("");
+          setDecisionDrafts({});
+        },
       });
-      if (!res.ok || !res.body) throw new Error(await readErrorBody(res));
-
-      reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let completed = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
-        for (const frame of frames) {
-          const eventMatch = frame.match(/^event:\s*(.+)$/m);
-          const dataMatch = frame.match(/^data:\s*(.+)$/m);
-          if (!eventMatch || !dataMatch) continue;
-          let data: { card?: TableauCard; message?: string; persona?: string; error?: string };
-          try {
-            data = JSON.parse(dataMatch[1]!);
-          } catch {
-            continue;
-          }
-          const evType = eventMatch[1]!.trim();
-          if (evType === "progress") {
-            setStreamStatus(
-              data.message || (data.persona ? `Goldfish (${personaLabel(data.persona)}) is reviewing...` : "Working..."),
-            );
-          } else if (evType === "complete" && data.card) {
-            completed = true;
-            onCardUpdated(data.card);
-            setMessage("");
-            setDecisionDrafts({});
-          } else if (evType === "error") {
-            throw new Error(data.error || "The agent round failed.");
-          }
-        }
-      }
-      // A stream that closes without a complete event failed mid-flight.
-      if (!completed) throw new Error("The interview stream ended before the round completed.");
     } catch (err) {
-      setError(errorText(err, "The interview round failed."));
+      if (mountedRef.current && !(err instanceof DOMException && err.name === "AbortError")) {
+        setError(errorText(err, "The interview round failed."));
+      }
     } finally {
-      void reader?.cancel().catch(() => undefined);
-      setBusy(false);
-      setStreamStatus(null);
+      if (mountedRef.current) {
+        setBusy(false);
+        setStreamStatus(null);
+      }
     }
   };
 
-  const callCard = async (fn: () => Promise<{ card: TableauCard }>, fallback: string, then?: () => void) => {
+  const runReview = useCallback(async () => {
+    if (readOnly || !card.goldfishSatisfied || !card.userSatisfied) return;
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    setActiveTab("review");
     setError(null);
     setBusy(true);
+    setReviewStep("gates");
+    setStreamStatus("Starting automated review (AxiomSpec G01-G14, reviewer, Stage 5-9 reassessment)...");
     try {
-      const res = await fn();
-      onCardUpdated(res.card);
-      then?.();
+      await consumeCardStream({
+        url: `/api/projects/${projectId}/cards/${card.id}/review/stream`,
+        csrfToken,
+        signal: controller.signal,
+        fallbackStatusLabel: "The automated review request failed",
+        incompleteError: "The automated review stream ended before producing a report.",
+        onProgress: (msg, step) => {
+          if (!mountedRef.current) return;
+          setStreamStatus(msg);
+          if (step) setReviewStep(step);
+        },
+        onComplete: (updated) => {
+          if (!mountedRef.current) return;
+          onCardUpdated(updated);
+          setActiveTab("review");
+        },
+      });
     } catch (err) {
-      setError(errorText(err, fallback));
+      if (mountedRef.current && !(err instanceof DOMException && err.name === "AbortError")) {
+        setError(errorText(err, "The automated review failed."));
+      }
     } finally {
-      setBusy(false);
+      if (mountedRef.current) {
+        setBusy(false);
+        setStreamStatus(null);
+        setReviewStep(null);
+      }
     }
-  };
+  }, [readOnly, card.goldfishSatisfied, card.userSatisfied, projectId, card.id, csrfToken, onCardUpdated]);
 
-  const cardApi = () => createApiClient(csrfToken).api.projects({ projectId }).cards({ cardId: card.id });
+  useEffect(() => {
+    if (!autoStartReview || didAutoReviewRef.current || !card.goldfishSatisfied || !card.userSatisfied || readOnly) {
+      return;
+    }
+    // Defer via macrotask so React 19 Strict Mode cancels the setup before firing a doomed stream request.
+    const timer = window.setTimeout(() => {
+      if (!mountedRef.current || didAutoReviewRef.current) return;
+      didAutoReviewRef.current = true;
+      void runReview();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [autoStartReview, card.goldfishSatisfied, card.userSatisfied, readOnly, runReview]);
 
   const toggleUserSatisfaction = (satisfied: boolean) =>
     callCard(() => unwrap(cardApi().satisfy.post({ userSatisfied: satisfied })), "Could not update your confirmation.");
@@ -244,9 +392,6 @@ export function CardStudioDrawer({
         if (targetColumn === "automated_review") setActiveTab("review");
       },
     );
-
-  const runReview = () =>
-    callCard(() => unwrap(cardApi().review.post()), "The automated review failed.", () => setActiveTab("review"));
 
   const resolveFinding = (findingId: string) =>
     callCard(
@@ -273,7 +418,56 @@ export function CardStudioDrawer({
       "The challenges could not be marked resolved.",
     );
 
-  const saveWritePaths = (e: FormEvent) => {
+  const saveDecisionAnswer = (decisionId: string, chosenOption: string | undefined, answerText: string, clearOpen?: boolean) => {
+    const trimmed = answerText.trim();
+    if (!trimmed) return setError("Enter an answer before saving the decision.");
+    return callCard(
+      () =>
+        unwrap(
+          cardApi().patch({
+            decisionAnswers: [{ decisionId, chosenOption, answerText: trimmed }],
+          }),
+        ),
+      "The decision could not be saved.",
+      () => {
+        setEditingDecisionId(null);
+        if (clearOpen) {
+          setDecisionDrafts((prev) => {
+            const next = { ...prev };
+            delete next[decisionId];
+            return next;
+          });
+        }
+      },
+    );
+  };
+
+  const beginEditDecision = (dec: CardDecision) => {
+    setEditingDecisionId(dec.id);
+    setSettledChoiceDraft(dec.chosenOption ?? undefined);
+    setSettledAnswerDraft(dec.answerText ?? dec.chosenOption ?? "");
+  };
+
+  const saveBriefAndScope = (e: FormEvent) => {
+    e.preventDefault();
+    const cleanSummary = summaryDraft.trim();
+    if (cleanSummary.length < 10) {
+      return setError("Feature brief must be at least 10 characters.");
+    }
+    const rawPaths = writePathsDraft
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (rawPaths.length === 0) return setError("Enter at least one relative write path.");
+    const verdict = validateRelativeWritePaths(rawPaths);
+    if (!verdict.ok) return setError(verdict.error);
+    return callCard(
+      () => unwrap(cardApi().patch({ summary: cleanSummary, writePaths: verdict.paths })),
+      "The brief and write scope could not be updated.",
+    );
+  };
+
+  const saveWritePathsOnly = (e: FormEvent) => {
     e.preventDefault();
     const rawPaths = writePathsDraft
       .split(",")
@@ -299,12 +493,22 @@ export function CardStudioDrawer({
     setTimeout(() => setCopiedSpec("idle"), 1600);
   };
 
+  const jumpToFixInterview = () => {
+    setActiveTab("interview");
+    setShowBriefEditor(true);
+  };
+
   const mdBytes = new TextEncoder().encode(card.draftMarkdown || "").length;
   const openDecisions = card.decisions.filter((d) => !d.resolved);
+  const settledDecisions = card.decisions.filter((d) => d.resolved);
   const openFindings = card.findings.filter((f) => !f.resolved);
   const resolvedFindings = card.findings.filter((f) => f.resolved);
   const unverifiedAssumptions = card.assumptions.filter((a) => a.status === "unverified").length;
   const review = card.latestReview;
+
+  const latestElephantMessage = [...card.messages].reverse().find((m) => m.role === "elephant");
+  const dialogueMessages = card.messages.filter((m) => showSwarmLogs || m.role !== "goldfish");
+  const rawGoldfishCount = card.messages.filter((m) => m.role === "goldfish").length;
 
   const blockingFindings = openFindings.filter((f) => f.severity === "BLOCKER" || f.severity === "MAJOR").length;
   const blockingDecisions = openDecisions.filter((d) => d.blocking).length;
@@ -312,62 +516,71 @@ export function CardStudioDrawer({
 
   const blockersToReview: string[] = [];
   if (card.goldfishRound === 0) {
-    blockersToReview.push("Run at least one Goldfish round");
+    blockersToReview.push("run Round 1");
   } else {
     if (blockingFindings > 0) {
-      blockersToReview.push(`resolve ${blockingFindings} blocker or major challenge${blockingFindings === 1 ? "" : "s"}`);
+      blockersToReview.push(`resolve ${blockingFindings} blocker/major challenge${blockingFindings === 1 ? "" : "s"}`);
     }
     if (blockingDecisions > 0) {
       blockersToReview.push(`answer ${blockingDecisions} blocking decision${blockingDecisions === 1 ? "" : "s"}`);
     }
     if (!card.userSatisfied) {
-      blockersToReview.push("click I am satisfied");
+      blockersToReview.push("confirm you are satisfied");
     }
   }
 
   const tabs: Array<{ id: StudioTab; label: string }> = [
     { id: "interview", label: openSwarmItems > 0 ? `Interview (${openSwarmItems})` : "Interview" },
-    { id: "review", label: card.reviewPassed ? "Review ✓" : "Review" },
+    { id: "review", label: card.reviewPassed ? "Review ✓" : review ? "Review !" : "Review" },
     { id: "spec", label: "Spec" },
     { id: "axiom", label: "Gates" },
   ];
 
-  const swarmStatusClass = card.goldfishRound === 0 ? "" : card.goldfishSatisfied ? "is-ok" : "is-open";
-  const swarmStatusText =
-    card.goldfishRound === 0
-      ? "Swarm: not started"
-      : card.goldfishSatisfied
-        ? "Swarm: satisfied"
-        : openSwarmItems > 0
-          ? `Swarm: ${openSwarmItems} open item${openSwarmItems === 1 ? "" : "s"}`
-          : "Swarm: needs another round";
+  // 4-step workflow progression bar.
+  const step1Done = card.goldfishRound > 0 && card.goldfishSatisfied;
+  const step2Done = card.userSatisfied;
+  const step3Done = card.reviewPassed;
+  const step4Done = card.column === "validated";
+  const workflowSteps = [
+    { num: 1, label: "Clarify with swarm", done: step1Done || step4Done, active: !step1Done && !step4Done },
+    {
+      num: 2,
+      label: "Dual sign-off",
+      done: (step1Done && step2Done) || step4Done,
+      active: step1Done && !step2Done && !step4Done,
+    },
+    {
+      num: 3,
+      label: "Automated review",
+      done: step3Done || step4Done,
+      active: step1Done && step2Done && !step3Done && !step4Done,
+    },
+    { num: 4, label: "Validated", done: step4Done, active: step4Done },
+  ];
 
-  const ownerStatusClass = card.userSatisfied ? "is-ok" : card.goldfishRound === 0 ? "" : "is-open";
-  const ownerStatusText = card.userSatisfied
-    ? "Owner: confirmed"
-    : card.goldfishRound === 0
-      ? "Owner: waiting on interview"
-      : "Owner: confirmation needed";
-
-  const reviewStatusClass = card.reviewPassed ? "is-ok" : review ? "is-open" : "";
-  const reviewStatusText = card.reviewPassed ? "Review: passed" : review ? "Review: needs fixes" : "Review: not run";
-
-  let nextStepHint = "Send your first note below so Elephant and the Goldfish swarm can examine this feature.";
+  let nextStepHint = "Describe the goal, failure modes, and non-goals on the left, then start Round 1.";
+  let bannerVariant = "";
   if (card.column === "archived") {
-    nextStepHint = "This feature is archived. Restore it to Ideas from Workspace to edit it.";
+    nextStepHint = "Archived and read-only. Restore this feature to Ideas on the board before editing.";
   } else if (card.column === "validated") {
-    nextStepHint = "This feature passed review and is ready to include when you seal the release.";
-  } else if (card.column === "automated_review") {
-    nextStepHint = card.reviewPassed
-      ? "Automated review passed. Open the Review tab and click Approve to Validated."
-      : "Open the Review tab and click Run review and reassessment.";
-  } else if (card.column === "idea" && card.messages.length === 0) {
-    nextStepHint = "Describe edge cases and limits below, then click Send and start round 1 to begin the interview.";
+    nextStepHint = "Automated review and gates passed. Ready to seal into a release.";
+    bannerVariant = "is-ok";
+  } else if (review && !review.passed) {
+    nextStepHint = `Automated review requested changes: ${review.summary}`;
+    bannerVariant = "is-warn";
+  } else if (card.reviewPassed) {
+    nextStepHint = "Automated review passed. Approve this card to Validated.";
+    bannerVariant = "is-ok";
   } else if (card.goldfishSatisfied && card.userSatisfied) {
-    nextStepHint = "Both you and the Goldfish swarm are satisfied. Click Move to review below.";
+    nextStepHint = "Both you and the Goldfish swarm signed off. Run Automated Review to check G01-G14 and get cross-family approval.";
+    bannerVariant = "is-ok";
+  } else if (card.goldfishSatisfied && !card.userSatisfied) {
+    nextStepHint = "Swarm has no remaining blockers. Review the brief and settled decisions on the right, then confirm you are satisfied.";
   } else if (card.goldfishRound > 0) {
-    nextStepHint = "Answer open decisions or resolve challenges above, run another round, then confirm you are satisfied.";
+    nextStepHint = "Read Elephant's latest question on the left, answer any decisions or challenges on the right, and send the next round.";
   }
+
+  const activeReviewIdx = REVIEW_STEPS.findIndex((s) => s.id === reviewStep);
 
   return (
     <div
@@ -382,24 +595,93 @@ export function CardStudioDrawer({
             <div className="card-meta-row">
               <span className="chip mono">{card.featureCode}</span>
               <span className="chip">{COLUMN_LABEL[card.column]}</span>
+              <span className="chip">{card.area}</span>
+              <span className="chip">{card.phase}</span>
+              <span className="chip">Size {card.size}</span>
               <span className="chip tabular">Round {card.goldfishRound}</span>
             </div>
             <h2 id="studio-title">{card.title}</h2>
-            <div className="status-row">
-              <span className={`status-pill ${swarmStatusClass}`}>{swarmStatusText}</span>
-              <span className={`status-pill ${ownerStatusClass}`}>{ownerStatusText}</span>
-              <span className={`status-pill ${reviewStatusClass}`}>{reviewStatusText}</span>
-            </div>
           </div>
-          <button ref={closeRef} type="button" className="icon-btn" aria-label="Close studio" onClick={onClose}>
+          <button
+            ref={closeRef}
+            type="button"
+            className="icon-btn"
+            aria-label="Close studio"
+            disabled={busy}
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
             </svg>
           </button>
         </header>
 
-        <div className="next-step-bar">
-          <strong>Next step:</strong> {nextStepHint}
+        <ol className="studio-stepper" aria-label="Feature workflow steps">
+          {workflowSteps.map((s) => (
+            <li
+              key={s.num}
+              className={`stepper-item ${s.done ? "is-done" : ""} ${s.active ? "is-active" : ""}`}
+            >
+              <span className="stepper-num tabular">{s.done ? "✓" : s.num}</span>
+              <span className="stepper-label">{s.label}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className={`next-step-bar ${bannerVariant}`}>
+          <div className="next-step-text">
+            <strong>Next step:</strong> {nextStepHint}
+          </div>
+          {!readOnly && card.column !== "validated" && (
+            <div className="next-step-cta">
+              {card.reviewPassed ? (
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm"
+                  disabled={busy}
+                  onClick={() => void moveCard("validated")}
+                >
+                  Approve to Validated →
+                </button>
+              ) : card.goldfishSatisfied && !card.userSatisfied ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={busy}
+                  onClick={() => void toggleUserSatisfaction(true)}
+                >
+                  Confirm: I am satisfied ✓
+                </button>
+              ) : review && !review.passed ? (
+                <>
+                  {activeTab !== "interview" && (
+                    <button type="button" className="btn btn-primary btn-sm" onClick={jumpToFixInterview}>
+                      Fix in Interview
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`btn ${activeTab === "interview" ? "btn-primary" : ""} btn-sm`}
+                    disabled={busy || !card.goldfishSatisfied || !card.userSatisfied}
+                    onClick={() => void runReview()}
+                  >
+                    Re-run review
+                  </button>
+                </>
+              ) : card.goldfishSatisfied && card.userSatisfied ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={busy}
+                  onClick={() => void runReview()}
+                >
+                  {busy ? "Reviewing..." : "Run automated review →"}
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
 
         <div className="segmented drawer-tabs" role="tablist" aria-label="Studio sections">
@@ -423,166 +705,444 @@ export function CardStudioDrawer({
           )}
           {error && (
             <div className="error-banner" role="alert">
-              {error}
+              <span>{error}</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setError(null)}>
+                Dismiss
+              </button>
             </div>
           )}
           {streamStatus && (
             <div className="live-status" role="status">
               <span className="spinner" aria-hidden="true" />
-              {streamStatus}
+              <span>{streamStatus}</span>
             </div>
           )}
 
           {activeTab === "interview" && (
-            <>
-              <section className="studio-section">
-                <div className="persona-bar">
-                  <span>
-                    <strong>Goldfish panel:</strong> {selectedPersonas.length} of {GOLDFISH_PERSONAS.length} active
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    aria-expanded={showPersonaPicker}
-                    onClick={() => setShowPersonaPicker((v) => !v)}
-                  >
-                    {showPersonaPicker ? "Hide reviewers" : "Customize"}
-                  </button>
-                </div>
-                {showPersonaPicker && (
-                  <div className="stack-tight">
-                    <p className="hint">Each Goldfish evaluates only the draft spec without seeing prior chat.</p>
-                    <div className="persona-chips">
-                      {GOLDFISH_PERSONAS.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          aria-pressed={selectedPersonas.includes(p.id)}
-                          className={`persona-chip ${selectedPersonas.includes(p.id) ? "active" : ""}`}
-                          onClick={() => togglePersona(p.id)}
-                          title={p.lens}
-                        >
-                          {p.label}
-                        </button>
-                      ))}
-                    </div>
+            <div className="studio-split">
+              <div className="studio-col-main">
+                {review && !review.passed && (
+                  <div className="notice notice-warn">
+                    <strong>Automated review blocked:</strong> {review.summary}{" "}
+                    <span className="muted">Update the brief or settled decisions on the right, then re-run review.</span>
                   </div>
                 )}
-              </section>
 
-              {openDecisions.length > 0 && (
-                <section className="studio-section">
-                  <h3>Open decisions ({openDecisions.length})</h3>
-                  <p className="hint">
-                    Answering a decision also confirms the unverified assumptions attached to this feature.
-                  </p>
-                  {openDecisions.map((dec) => (
-                    <div key={dec.id} className="field decision">
-                      <label htmlFor={`dec-${dec.id}`}>
-                        <span className="mono">{dec.id}</span> {dec.question}
-                        {dec.blocking && <span className="badge badge-danger">Blocking</span>}
-                      </label>
-                      {dec.options.length > 0 && (
-                        <div className="choice-row">
-                          {dec.options.map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              aria-pressed={decisionDrafts[dec.id] === opt}
-                              className={`choice ${decisionDrafts[dec.id] === opt ? "active" : ""}`}
-                              onClick={() => setDecisionDrafts((prev) => ({ ...prev, [dec.id]: opt }))}
-                            >
-                              {opt}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <input
-                        id={`dec-${dec.id}`}
-                        className="input"
-                        value={decisionDrafts[dec.id] ?? ""}
-                        onChange={(e) => setDecisionDrafts((prev) => ({ ...prev, [dec.id]: e.target.value }))}
-                        placeholder="Your answer and rationale"
-                      />
+                {latestElephantMessage ? (
+                  <section className="elephant-focus" aria-label="Latest Elephant prompt">
+                    <div className="elephant-focus-head">
+                      <strong>Latest question from Elephant</strong>
+                      <span className="chip tabular">Round {latestElephantMessage.round}</span>
                     </div>
-                  ))}
-                </section>
-              )}
+                    <div className="elephant-focus-body">{latestElephantMessage.content}</div>
+                  </section>
+                ) : (
+                  <section className="elephant-focus" aria-label="Starter guide">
+                    <div className="elephant-focus-head">
+                      <strong>What to write to start Round 1</strong>
+                      <span className="chip">Guide</span>
+                    </div>
+                    <ul className="guide-bullets">
+                      <li>
+                        <strong>Flow:</strong> exact user input, endpoint/state transition, and success result.
+                      </li>
+                      <li>
+                        <strong>Failures &amp; limits:</strong> error codes (401/429/etc.), max lengths, no client retries.
+                      </li>
+                      <li>
+                        <strong>Boundaries:</strong> list explicit non-goals and check the relative file paths on the right.
+                      </li>
+                    </ul>
+                  </section>
+                )}
 
-              {openFindings.length > 0 && (
-                <section className="studio-section">
+                <form onSubmit={runInterviewTurn} className="studio-reply-card">
                   <div className="section-head">
-                    <h3>Open Goldfish challenges ({openFindings.length})</h3>
-                    {!readOnly && (
+                    <label htmlFor="interview-input" className="reply-title">
+                      {card.goldfishRound === 0 ? "Your specification details" : "Your reply to Elephant"}
+                    </label>
+                    <span className="hint">Sent together with any filled open decisions</span>
+                  </div>
+                  <textarea
+                    id="interview-input"
+                    className="textarea"
+                    value={message}
+                    disabled={readOnly || busy}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder={
+                      card.goldfishRound === 0
+                        ? "Example: Users sign in with email and password via POST /api/auth/login. Valid credentials set a session cookie and redirect to /. Invalid or throttled requests show one uniform alert with zero mutation. Out of scope: signup, reset password, MFA."
+                        : "Reply directly to Elephant's questions above, state error codes, limits, or non-goals."
+                    }
+                  />
+                  <div className="composer-actions">
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={busy || readOnly || (!message.trim() && Object.values(decisionDrafts).every((d) => !d.answerText.trim()))}
+                    >
+                      {busy
+                        ? "Running round..."
+                        : card.goldfishRound === 0
+                          ? "Send & start Round 1"
+                          : "Send reply & run round"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${card.userSatisfied ? "btn-success" : ""}`}
+                      aria-pressed={card.userSatisfied}
+                      disabled={busy || readOnly || card.goldfishRound === 0}
+                      onClick={() => void toggleUserSatisfaction(!card.userSatisfied)}
+                    >
+                      {card.userSatisfied ? "Owner confirmed ✓" : "I am satisfied"}
+                    </button>
+                    {card.goldfishSatisfied && card.userSatisfied && !readOnly && (
                       <button
                         type="button"
-                        className="btn btn-sm"
+                        className="btn"
                         disabled={busy}
-                        onClick={() => void resolveAllFindings()}
+                        onClick={() => void runReview()}
                       >
-                        Resolve all
+                        Send to review →
                       </button>
                     )}
                   </div>
-                  <ul className="plain-list">
-                    {openFindings.map((f) => (
-                      <FindingRow key={f.id} finding={f} busy={busy} readOnly={readOnly} onResolve={resolveFinding} />
-                    ))}
-                  </ul>
+                  <p className={`readiness-line ${blockersToReview.length === 0 ? "is-ready" : ""}`}>
+                    {blockersToReview.length === 0
+                      ? "Ready: both you and the Goldfish swarm signed off."
+                      : `Still needed before Automated Review: ${blockersToReview.join(", ")}.`}
+                  </p>
+                </form>
+
+                <section className="studio-section" aria-label="Interview history">
+                  <div className="section-head">
+                    <h3>Conversation ({dialogueMessages.length})</h3>
+                    {rawGoldfishCount > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setShowSwarmLogs((v) => !v)}
+                      >
+                        {showSwarmLogs ? "Hide Goldfish notes" : `Show Goldfish notes (${rawGoldfishCount})`}
+                      </button>
+                    )}
+                  </div>
+                  <div className="chat-feed">
+                    {dialogueMessages.length === 0 ? (
+                      <p className="muted">No messages yet. Start Round 1 above to get Elephant&apos;s feedback.</p>
+                    ) : (
+                      dialogueMessages.map((m) => (
+                        <div key={m.id} className={`msg-bubble role-${m.role}`}>
+                          <div className="msg-meta">
+                            <strong>{m.role === "goldfish" ? `Goldfish · ${personaLabel(m.persona)}` : m.role}</strong>
+                            <span className="tabular">Round {m.round}</span>
+                            {m.modelUsed && <span className="mono">{m.modelUsed}</span>}
+                            {m.contextIsolated && <span className="badge badge-info">Fresh context</span>}
+                          </div>
+                          <div className="msg-text">{m.content}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </section>
-              )}
+              </div>
 
-              {resolvedFindings.length > 0 && (
-                <details className="subtle-disclosure">
-                  <summary>
-                    <span>Resolved challenges</span>
-                    <span className="count-pill tabular">{resolvedFindings.length}</span>
-                  </summary>
-                  <ul className="plain-list">
-                    {resolvedFindings.map((f) => (
-                      <FindingRow key={f.id} finding={f} busy={busy} readOnly={readOnly} />
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {card.assumptions.length > 0 && (
-                <details className="subtle-disclosure" open={unverifiedAssumptions > 0}>
-                  <summary>
-                    <span>
-                      Assumptions ({card.assumptions.length}
-                      {unverifiedAssumptions > 0 ? `, ${unverifiedAssumptions} unverified` : ""})
-                    </span>
-                  </summary>
-                  <ul className="plain-list">
-                    {card.assumptions.map((a) => (
-                      <li key={a.id} className="assumption">
-                        <span className={`badge ${ASSUMPTION_BADGE[a.status]}`}>{a.status}</span>
-                        <span className={`badge ${RISK_BADGE[a.riskIfFalse]}`}>risk {a.riskIfFalse}</span>
-                        <span>{a.statement}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              <section className="chat-feed studio-section" aria-label="Interview transcript">
-                {card.messages.length === 0 ? (
-                  <p className="muted">No messages yet. Send your first note below to begin round 1.</p>
-                ) : (
-                  card.messages.map((m) => (
-                    <div key={m.id} className={`msg-bubble role-${m.role}`}>
-                      <div className="msg-meta">
-                        <strong>{m.role === "goldfish" ? `Goldfish · ${personaLabel(m.persona)}` : m.role}</strong>
-                        {m.modelUsed && <span className="mono">{m.modelUsed}</span>}
-                        {m.contextIsolated && <span className="badge badge-info">Fresh context</span>}
-                      </div>
-                      <div className="msg-text">{m.content}</div>
+              <div className="studio-col-side">
+                {openDecisions.length > 0 && (
+                  <section className="studio-side-card">
+                    <div className="section-head">
+                      <h3>Open decisions ({openDecisions.length})</h3>
                     </div>
-                  ))
+                    <p className="hint">
+                      Pick an option or write your decision. Saving also confirms unverified assumptions.
+                    </p>
+                    {openDecisions.map((dec) => {
+                      const draft = decisionDrafts[dec.id] ?? { answerText: "" };
+                      return (
+                        <div key={dec.id} className="field decision">
+                          <label htmlFor={`dec-${dec.id}`}>
+                            <span className="mono">{dec.id}</span> {dec.question}
+                            {dec.blocking && <span className="badge badge-danger">Blocking</span>}
+                          </label>
+                          {dec.options.length > 0 && (
+                            <div className="choice-row">
+                              {dec.options.map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  aria-pressed={draft.chosenOption === opt}
+                                  className={`choice ${draft.chosenOption === opt ? "active" : ""}`}
+                                  onClick={() =>
+                                    setDecisionDrafts((prev) => ({
+                                      ...prev,
+                                      [dec.id]: { chosenOption: opt, answerText: opt },
+                                    }))
+                                  }
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="decision-input-row">
+                            <input
+                              id={`dec-${dec.id}`}
+                              className="input"
+                              disabled={readOnly || busy}
+                              value={draft.answerText}
+                              onChange={(e) =>
+                                setDecisionDrafts((prev) => ({
+                                  ...prev,
+                                  [dec.id]: { chosenOption: prev[dec.id]?.chosenOption, answerText: e.target.value },
+                                }))
+                              }
+                              placeholder="Type your decision and rationale"
+                            />
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                disabled={busy || !draft.answerText.trim()}
+                                onClick={() => void saveDecisionAnswer(dec.id, draft.chosenOption, draft.answerText, true)}
+                              >
+                                Save
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </section>
                 )}
-              </section>
-            </>
+
+                {settledDecisions.length > 0 && (
+                  <section className="studio-side-card">
+                    <div className="section-head">
+                      <h3>Settled decisions ({settledDecisions.length})</h3>
+                      <span className="hint">Included in the spec</span>
+                    </div>
+                    <div className="stack-tight">
+                      {settledDecisions.map((dec) => {
+                        const isEditing = editingDecisionId === dec.id;
+                        return (
+                          <div key={dec.id} className="settled-decision">
+                            <div className="finding-head">
+                              <span className="mono finding-id">{dec.id}</span>
+                              <span className="badge badge-emerald">Settled</span>
+                              {!readOnly && !isEditing && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={busy}
+                                  onClick={() => beginEditDecision(dec)}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                            <p className="settled-question">{dec.question}</p>
+                            {!isEditing ? (
+                              <p className="settled-answer">
+                                {dec.answerText || dec.chosenOption || "Resolved"}
+                              </p>
+                            ) : (
+                              <div className="stack-tight">
+                                {dec.options.length > 0 && (
+                                  <div className="choice-row">
+                                    {dec.options.map((opt) => (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        aria-pressed={settledChoiceDraft === opt}
+                                        className={`choice ${settledChoiceDraft === opt ? "active" : ""}`}
+                                        onClick={() => {
+                                          setSettledChoiceDraft(opt);
+                                          setSettledAnswerDraft(opt);
+                                        }}
+                                      >
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                <input
+                                  aria-label={`Edit ${dec.id}`}
+                                  className="input"
+                                  value={settledAnswerDraft}
+                                  disabled={busy}
+                                  onChange={(e) => setSettledAnswerDraft(e.target.value)}
+                                />
+                                <div className="row-gap">
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    disabled={busy || !settledAnswerDraft.trim()}
+                                    onClick={() => void saveDecisionAnswer(dec.id, settledChoiceDraft, settledAnswerDraft)}
+                                  >
+                                    Save decision
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={busy}
+                                    onClick={() => setEditingDecisionId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                <section className="studio-side-card">
+                  <div className="section-head">
+                    <h3>Brief &amp; write scope</h3>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-expanded={showBriefEditor}
+                      onClick={() => setShowBriefEditor((v) => !v)}
+                    >
+                      {showBriefEditor ? "Hide editor" : "Edit brief & files"}
+                    </button>
+                  </div>
+                  {!showBriefEditor ? (
+                    <div className="stack-tight">
+                      <p className="muted settled-question">{card.summary}</p>
+                      <p className="hint mono">Files: {card.writePaths.join(", ") || "None declared"}</p>
+                    </div>
+                  ) : (
+                    <form onSubmit={saveBriefAndScope} className="stack-tight">
+                      <div className="field">
+                        <label htmlFor="studio-brief-summary">Feature brief</label>
+                        <textarea
+                          id="studio-brief-summary"
+                          className="textarea"
+                          value={summaryDraft}
+                          disabled={busy || readOnly}
+                          onChange={(e) => setSummaryDraft(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="studio-brief-paths">Allowed relative write paths (comma-separated)</label>
+                        <input
+                          id="studio-brief-paths"
+                          className="input mono"
+                          value={writePathsDraft}
+                          disabled={busy || readOnly}
+                          onChange={(e) => setWritePathsDraft(e.target.value)}
+                          placeholder="src/login/, tests/login.test.ts"
+                        />
+                      </div>
+                      {!readOnly && (
+                        <div className="row-gap">
+                          <button type="submit" className="btn btn-sm" disabled={busy}>
+                            Save brief &amp; scope
+                          </button>
+                        </div>
+                      )}
+                    </form>
+                  )}
+                </section>
+
+                <section className="studio-side-card">
+                  <div className="persona-bar">
+                    <span>
+                      <strong>Goldfish swarm:</strong> {selectedPersonas.length} of {GOLDFISH_PERSONAS.length} lenses
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-expanded={showPersonaPicker}
+                      onClick={() => setShowPersonaPicker((v) => !v)}
+                    >
+                      {showPersonaPicker ? "Hide" : "Customize"}
+                    </button>
+                  </div>
+                  {showPersonaPicker && (
+                    <div className="stack-tight">
+                      <p className="hint">Each Goldfish evaluates only the spec without seeing prior chat.</p>
+                      <div className="persona-chips">
+                        {GOLDFISH_PERSONAS.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            aria-pressed={selectedPersonas.includes(p.id)}
+                            className={`persona-chip ${selectedPersonas.includes(p.id) ? "active" : ""}`}
+                            onClick={() => togglePersona(p.id)}
+                            title={p.lens}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {openFindings.length > 0 && (
+                    <div className="stack-tight">
+                      <div className="section-head">
+                        <h3>Open challenges ({openFindings.length})</h3>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={busy}
+                            onClick={() => void resolveAllFindings()}
+                          >
+                            Resolve all
+                          </button>
+                        )}
+                      </div>
+                      <ul className="plain-list">
+                        {openFindings.map((f) => (
+                          <FindingRow key={f.id} finding={f} busy={busy} readOnly={readOnly} onResolve={resolveFinding} />
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {resolvedFindings.length > 0 && (
+                    <details className="subtle-disclosure">
+                      <summary>
+                        <span>Resolved challenges</span>
+                        <span className="count-pill tabular">{resolvedFindings.length}</span>
+                      </summary>
+                      <ul className="plain-list">
+                        {resolvedFindings.map((f) => (
+                          <FindingRow key={f.id} finding={f} busy={busy} readOnly={readOnly} />
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {card.assumptions.length > 0 && (
+                    <details className="subtle-disclosure" open={unverifiedAssumptions > 0}>
+                      <summary>
+                        <span>
+                          Assumptions ({card.assumptions.length}
+                          {unverifiedAssumptions > 0 ? `, ${unverifiedAssumptions} unverified` : ""})
+                        </span>
+                      </summary>
+                      <ul className="plain-list">
+                        {card.assumptions.map((a) => (
+                          <li key={a.id} className="assumption">
+                            <span className={`badge ${ASSUMPTION_BADGE[a.status]}`}>{a.status}</span>
+                            <span className={`badge ${RISK_BADGE[a.riskIfFalse]}`}>risk {a.riskIfFalse}</span>
+                            <span>{a.statement}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </section>
+              </div>
+            </div>
           )}
 
           {activeTab === "review" && (
@@ -597,6 +1157,25 @@ export function CardStudioDrawer({
                   you are satisfied.
                 </p>
               )}
+
+              {busy && reviewStep && (
+                <ol className="review-progress-list" aria-label="Automated review progress">
+                  {REVIEW_STEPS.map((step, idx) => {
+                    const done = activeReviewIdx > idx || reviewStep === "saved";
+                    const current = activeReviewIdx === idx;
+                    return (
+                      <li
+                        key={step.id}
+                        className={`review-progress-step ${done ? "is-done" : ""} ${current ? "is-current" : ""}`}
+                      >
+                        <span className="stepper-num">{done ? "✓" : current ? "…" : idx + 1}</span>
+                        <span>{step.label}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+
               <div className="row-gap">
                 <button
                   type="button"
@@ -604,7 +1183,7 @@ export function CardStudioDrawer({
                   disabled={busy || readOnly || !card.goldfishSatisfied || !card.userSatisfied}
                   onClick={() => void runReview()}
                 >
-                  {busy ? "Running gates..." : review ? "Re-run review" : "Run review and reassessment"}
+                  {busy ? "Running review..." : review ? "Re-run review" : "Run review and reassessment"}
                 </button>
                 {card.reviewPassed && card.column !== "validated" && (
                   <button
@@ -616,10 +1195,15 @@ export function CardStudioDrawer({
                     Approve to Validated
                   </button>
                 )}
+                {review && !review.passed && !readOnly && (
+                  <button type="button" className="btn" disabled={busy} onClick={jumpToFixInterview}>
+                    Fix brief &amp; decisions in Interview →
+                  </button>
+                )}
                 {card.column === "automated_review" && (
                   <button
                     type="button"
-                    className="btn"
+                    className="btn btn-ghost"
                     disabled={busy}
                     onClick={() => void moveCard("goldfish_interview")}
                   >
@@ -673,7 +1257,7 @@ export function CardStudioDrawer({
                 </section>
               ) : (
                 <div className="empty-state">
-                  <p>No review report yet. Run the review once the interview reaches dual satisfaction.</p>
+                  <p>No review report yet. Click Run review and reassessment once dual satisfaction is confirmed.</p>
                 </div>
               )}
             </>
@@ -703,7 +1287,7 @@ export function CardStudioDrawer({
                 aria-label="Spec size"
               />
               {!readOnly && (
-                <form onSubmit={saveWritePaths} className="scope-form">
+                <form onSubmit={saveWritePathsOnly} className="scope-form">
                   <div className="field">
                     <label htmlFor="drawer-write-paths">Write scope (comma-separated relative paths)</label>
                     <input
@@ -721,7 +1305,7 @@ export function CardStudioDrawer({
                 </form>
               )}
               <pre className="code-block">
-                {card.draftMarkdown || "The feature Markdown draft appears after round 1."}
+                {card.draftMarkdown || "The feature Markdown draft appears after Round 1."}
               </pre>
             </>
           )}
@@ -766,57 +1350,6 @@ export function CardStudioDrawer({
               </div>
             ))}
         </div>
-
-        {activeTab === "interview" && (
-          <footer className="drawer-footer">
-            <p className={`readiness-line ${blockersToReview.length === 0 ? "is-ready" : ""}`}>
-              {blockersToReview.length === 0
-                ? "Ready for automated review: both you and the Goldfish swarm are satisfied."
-                : `Next to unlock review: ${blockersToReview.join(", ")}.`}
-            </p>
-            <form onSubmit={runInterviewTurn} className="composer">
-              <label htmlFor="interview-input" className="sr-only">
-                Your reply to Elephant
-              </label>
-              <textarea
-                id="interview-input"
-                className="textarea"
-                value={message}
-                disabled={readOnly}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Clarify failure modes, non-goals, and limits, or answer the open decisions above."
-              />
-              <div className="composer-actions">
-                <button type="submit" className="btn btn-primary" disabled={busy || readOnly}>
-                  {busy
-                    ? "Running round..."
-                    : card.goldfishRound === 0
-                      ? "Send and start round 1"
-                      : "Send and run round"}
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${card.userSatisfied ? "btn-success" : ""}`}
-                  aria-pressed={card.userSatisfied}
-                  disabled={busy || readOnly}
-                  onClick={() => void toggleUserSatisfaction(!card.userSatisfied)}
-                >
-                  {card.userSatisfied ? "Confirmed ✓" : "I am satisfied"}
-                </button>
-                {(card.column === "idea" || card.column === "goldfish_interview") && (
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={busy || readOnly || !card.goldfishSatisfied || !card.userSatisfied}
-                    onClick={() => void moveCard("automated_review")}
-                  >
-                    Move to review
-                  </button>
-                )}
-              </div>
-            </form>
-          </footer>
-        )}
       </aside>
     </div>
   );

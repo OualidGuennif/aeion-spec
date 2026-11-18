@@ -181,6 +181,37 @@ function appendSystemSeedDecisionsIfEmpty(card: TableauCard): void {
   }
 }
 
+/** Apply owner decision answers and confirm unverified assumptions when at least one decision matches. */
+export function applyDecisionAnswers(
+  card: TableauCard,
+  decisionAnswers?: Array<{
+    decisionId: string;
+    chosenOption?: string;
+    answerText: string;
+  }>,
+): boolean {
+  if (!decisionAnswers || decisionAnswers.length === 0) return false;
+  let updatedAny = false;
+  for (const ans of decisionAnswers) {
+    const trimmed = ans.answerText.trim();
+    if (!trimmed) continue;
+    const dec = card.decisions.find((d) => d.id === ans.decisionId);
+    if (dec) {
+      dec.chosenOption = ans.chosenOption ?? dec.chosenOption;
+      dec.answerText = trimmed;
+      dec.resolved = true;
+      updatedAny = true;
+    }
+  }
+  if (!updatedAny) return false;
+  for (const asm of card.assumptions) {
+    if (asm.status === "unverified") {
+      asm.status = "confirmed";
+    }
+  }
+  return true;
+}
+
 export async function startOrContinueInterview(params: {
   ctx: { db: Database; rootKey: Buffer; user: StoredUserRecord };
   project: ProjectRecord;
@@ -217,21 +248,7 @@ export async function startOrContinueInterview(params: {
     (decisionAnswers && decisionAnswers.length > 0) ||
       (userMessage.trim().length >= 25 && card.goldfishRound >= 1),
   );
-  if (decisionAnswers && decisionAnswers.length > 0) {
-    for (const ans of decisionAnswers) {
-      const dec = card.decisions.find((d) => d.id === ans.decisionId);
-      if (dec) {
-        dec.chosenOption = ans.chosenOption ?? dec.chosenOption;
-        dec.answerText = ans.answerText.trim();
-        dec.resolved = true;
-      }
-    }
-    for (const asm of card.assumptions) {
-      if (asm.status === "unverified") {
-        asm.status = "confirmed";
-      }
-    }
-  }
+  applyDecisionAnswers(card, decisionAnswers);
   if (hasClarification) {
     const resolutionText =
       decisionAnswers && decisionAnswers.length > 0
@@ -387,8 +404,9 @@ export async function runAutomatedReviewPipeline(params: {
   project: ProjectRecord;
   release: ReleaseRecord;
   card: TableauCard;
+  onEvent?: (evt: Record<string, unknown>) => void;
 }): Promise<TableauCard> {
-  const { ctx, project, release, card } = params;
+  const { ctx, project, release, card, onEvent } = params;
   const allCards = StoreRepository.listCards(ctx.db, project.id, release.id);
   const seq = Math.max(
     1,
@@ -404,6 +422,11 @@ export async function runAutomatedReviewPipeline(params: {
   const mixer = StoreRepository.getMixer(ctx.db, project.id);
 
   // 1. Build & validate Observability export bundle + Manifesto
+  onEvent?.({
+    type: "progress",
+    step: "gates",
+    message: "Checking Observability export budget and AxiomSpec G01-G14 gates...",
+  });
   const obsBundle = buildObservabilityBundle({
     project,
     release,
@@ -420,6 +443,11 @@ export async function runAutomatedReviewPipeline(params: {
   const axiomReport = await validateAxiom03Spec(axiomDoc);
 
   // 3. Cross-family Automated Reviewer Agent
+  onEvent?.({
+    type: "progress",
+    step: "reviewer",
+    message: "Running independent cross-family automated reviewer...",
+  });
   const reviewerOutcome = await runCrossFamilyReviewerAgent({
     project,
     card,
@@ -429,6 +457,11 @@ export async function runAutomatedReviewPipeline(params: {
   });
 
   // 4. Final fresh-context Goldfish Reassessment (Stage 5-9 verification)
+  onEvent?.({
+    type: "progress",
+    step: "reassessment",
+    message: "Running Stage 5-9 fresh-context Goldfish reassessment...",
+  });
   const reassessment = await runGoldfishSwarm({
     project,
     card: { ...card, draftMarkdown: obsBundle.feature.markdown },
@@ -479,6 +512,13 @@ export async function runAutomatedReviewPipeline(params: {
     createdAt: new Date().toISOString(),
   });
   StoreRepository.saveCard(ctx.db, card);
+  onEvent?.({
+    type: "progress",
+    step: "saved",
+    message: passed
+      ? "Automated review passed."
+      : "Automated review completed with items to address.",
+  });
   return card;
 }
 
@@ -489,8 +529,9 @@ export async function transitionTableauCard(params: {
   card: TableauCard;
   targetColumn: TableauColumn;
   position?: number;
+  onEvent?: (evt: Record<string, unknown>) => void;
 }): Promise<TableauCard> {
-  const { ctx, project, release, card, targetColumn, position } = params;
+  const { ctx, project, release, card, targetColumn, position, onEvent } = params;
 
   if (targetColumn === card.column) {
     if (typeof position === "number") {
@@ -530,6 +571,7 @@ export async function transitionTableauCard(params: {
         release,
         card,
         userMessage: `Start Goldfish adversarial interview on ${card.featureCode}: ${card.title}.`,
+        onEvent,
       });
     }
     return card;
@@ -552,6 +594,7 @@ export async function transitionTableauCard(params: {
         project,
         release,
         card,
+        onEvent,
       });
     } catch (err) {
       // A review that never ran must not leave the card parked in the review column.

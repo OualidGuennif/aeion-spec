@@ -88,7 +88,11 @@ HMAC-SHA256 release digests, and 8-section Observability feature manifests (`<= 
   key of another purpose or provider is refused for a role; for OpenCode Go keys, the relay discovers the
   account's enabled `/v1/models` list and heals disabled role assignments. `exporter.ts` renders bounded
   settled `DEC-*` answers inline under `Decision Status`, and card create/patch refuses invalid `write_paths`
-  (leading `/`, `..`, `\`, or blank entries) with 400.
+  (leading `/`, `..`, `\`, or blank entries) with 400 while also allowing settled `decisionAnswers` updates.
+- `POST /api/projects/:projectId/cards/:cardId/review/stream` streams progress phases (with client-disconnect
+  safety and 20 s keepalives) and runs the same dual-satisfaction, in-flight lock, and failure column rollback
+  guards as `POST /move` (`automated_review`) and `POST /review`. Direct `PATCH` rejects whitespace-only or
+  unknown `decisionAnswers` before mutating the card.
 
 ## Determinism
 
@@ -97,7 +101,7 @@ compilation and accurate G14 incremental release diffs across sealed versions.
 
 ## Acceptance checks
 
-- [ ] `(cd app && bun test packages/server/test)` passes (24 tests, including `review-fixes.test.ts`).
+- [ ] `(cd app && bun test packages/server/test)` passes (28 tests, including `review-fixes.test.ts`).
 - [ ] `.venv/bin/python -m unittest discover -s app/tests -v` passes Python quarantine & Axiom03 checks.
 
 ## Out of scope

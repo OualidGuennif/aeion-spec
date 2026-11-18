@@ -1,0 +1,8 @@
+# Spec: knowledge/policies/security.md
+# Temporary time-bounded waiver (1 month, approved by owner 2026-11-18):
+# picomatch@4.0.7 is npm's latest release with no upstream patch yet (micromatch/picomatch#194 open).
+# Pulled transitively by @flue/cli -> @flue/vite -> vite/tinyglobby; unreachable from untrusted user globs.
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2026-12-18
+reason = "No patched picomatch npm release (> 4.0.7) available yet (PR #194 open); confined to @flue/cli/@flue/vite local bundler, unreachable from untrusted user globs."
