@@ -181,7 +181,7 @@ function appendSystemSeedDecisionsIfEmpty(card: TableauCard): void {
   }
 }
 
-/** Apply owner decision answers and confirm any unverified assumptions. */
+/** Apply owner decision answers and confirm unverified assumptions when at least one decision matches. */
 export function applyDecisionAnswers(
   card: TableauCard,
   decisionAnswers?: Array<{
@@ -193,20 +193,23 @@ export function applyDecisionAnswers(
   if (!decisionAnswers || decisionAnswers.length === 0) return false;
   let updatedAny = false;
   for (const ans of decisionAnswers) {
+    const trimmed = ans.answerText.trim();
+    if (!trimmed) continue;
     const dec = card.decisions.find((d) => d.id === ans.decisionId);
     if (dec) {
       dec.chosenOption = ans.chosenOption ?? dec.chosenOption;
-      dec.answerText = ans.answerText.trim();
+      dec.answerText = trimmed;
       dec.resolved = true;
       updatedAny = true;
     }
   }
+  if (!updatedAny) return false;
   for (const asm of card.assumptions) {
     if (asm.status === "unverified") {
       asm.status = "confirmed";
     }
   }
-  return updatedAny;
+  return true;
 }
 
 export async function startOrContinueInterview(params: {

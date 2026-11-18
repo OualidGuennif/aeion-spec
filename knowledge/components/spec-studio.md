@@ -78,7 +78,8 @@ active sheets, and immutable release history entries.
   Open Goldfish challenges offer a single-click `Resolve all` action that batches resolutions via
   `PATCH /cards/:cardId`, settled `DEC-*` answers stay inspectable and editable alongside feature brief and
   `write_paths` inputs inside the two-column Feature Studio, and Next.js proxies `/api/*` and `/v1/*`
-  through a streaming Node App Router handler rather than `rewrites()`'s 30 s socket timeout.
+  through a streaming Node App Router handler (enforcing the 105 MiB upload body bound for both sized and
+  chunked bodies) rather than `rewrites()`'s 30 s socket timeout.
 - A guest vault reads "sealed in memory", never "sealed at rest"; archived cards open read-only.
 - At 760 px and below, the top bar scrolls away instead of staying pinned, stage tabs scroll smoothly, data
   tables stack cleanly, and interactive controls meet a 44 px minimum hit target.

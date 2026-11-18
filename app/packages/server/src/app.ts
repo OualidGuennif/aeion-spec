@@ -168,13 +168,29 @@ function sseCardStream(
   run: (emit: (evt: Record<string, unknown>) => void) => Promise<TableauCard>,
 ): Response {
   const encoder = new TextEncoder();
+  let closed = false;
   const stream = new ReadableStream({
+    cancel() {
+      closed = true;
+    },
     async start(controller) {
+      const safeEnqueue = (chunk: Uint8Array) => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true;
+        }
+      };
       const push = (eventName: string, data: unknown) => {
-        controller.enqueue(
+        safeEnqueue(
           encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`),
         );
       };
+      // Periodic SSE keepalive prevents Bun/proxy idle disconnects during long single agent calls.
+      const keepalive = setInterval(() => {
+        safeEnqueue(encoder.encode(": keepalive\n\n"));
+      }, 20_000);
       try {
         const updated = await whileCardInFlight(cardId, () =>
           run((evt) => push("progress", evt)),
@@ -185,7 +201,15 @@ function sseCardStream(
           error: err instanceof Error ? err.message : failureLabel,
         });
       } finally {
-        controller.close();
+        clearInterval(keepalive);
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Stream already closed by client disconnect.
+          }
+        }
       }
     },
   });
@@ -594,6 +618,15 @@ export const app = new Elysia({ name: "aeion-spec-api" })
         return { error: "Project not found." };
       }
       const { release, card } = requireActiveCard(ctx.db, project, params.cardId);
+      if (body.decisionAnswers !== undefined) {
+        const missingDec = body.decisionAnswers.find(
+          (a) => !card.decisions.some((d) => d.id === a.decisionId),
+        );
+        if (missingDec) {
+          set.status = 400;
+          return { error: `Unknown decision '${missingDec.decisionId}' on ${card.featureCode}.` };
+        }
+      }
       if (body.writePaths !== undefined) {
         const pathsVerdict = validateRelativeWritePaths(body.writePaths);
         if (!pathsVerdict.ok) {

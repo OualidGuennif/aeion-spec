@@ -101,9 +101,9 @@ export const CreateCardSchema = t.Object({
 });
 
 export const DecisionAnswerItemSchema = t.Object({
-  decisionId: t.String(),
+  decisionId: t.String({ minLength: 1, maxLength: 80 }),
   chosenOption: t.Optional(t.String()),
-  answerText: t.String({ minLength: 1, maxLength: 2000 }),
+  answerText: t.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }),
 });
 
 export const UpdateCardSchema = t.Object({

@@ -76,6 +76,7 @@ async function consumeCardStream(params: {
   url: string;
   csrfToken: string;
   body?: unknown;
+  signal?: AbortSignal;
   fallbackStatusLabel: string;
   incompleteError: string;
   onProgress: (message: string, step?: string) => void;
@@ -93,6 +94,7 @@ async function consumeCardStream(params: {
     method: "POST",
     credentials: "include",
     headers,
+    signal: params.signal,
     body: params.body !== undefined ? JSON.stringify(params.body) : undefined,
   });
   if (!res.ok || !res.body) {
@@ -212,8 +214,18 @@ export function CardStudioDrawer({
 
   const closeRef = useRef<HTMLButtonElement>(null);
   const didAutoReviewRef = useRef(false);
+  const mountedRef = useRef(true);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const readOnly = card.column === "archived";
   const writePathsValue = card.writePaths.join(", ");
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      streamAbortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     setSummaryDraft(card.summary);
@@ -245,12 +257,13 @@ export function CardStudioDrawer({
     setBusy(true);
     try {
       const res = await fn();
+      if (!mountedRef.current) return;
       onCardUpdated(res.card);
       then?.();
     } catch (err) {
-      setError(errorText(err, fallback));
+      if (mountedRef.current) setError(errorText(err, fallback));
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
@@ -271,6 +284,10 @@ export function CardStudioDrawer({
       }));
     if (!message.trim() && decisionAnswers.length === 0) return;
 
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     setError(null);
     setBusy(true);
     setReviewStep(null);
@@ -279,6 +296,7 @@ export function CardStudioDrawer({
       await consumeCardStream({
         url: `/api/projects/${projectId}/cards/${card.id}/interview/stream`,
         csrfToken,
+        signal: controller.signal,
         body: {
           message: message.trim() || "Reassess the settled decisions with fresh Goldfish contexts.",
           decisionAnswers,
@@ -286,23 +304,34 @@ export function CardStudioDrawer({
         },
         fallbackStatusLabel: "The interview request failed",
         incompleteError: "The interview stream ended before the round completed.",
-        onProgress: (msg) => setStreamStatus(msg),
+        onProgress: (msg) => {
+          if (mountedRef.current) setStreamStatus(msg);
+        },
         onComplete: (updated) => {
+          if (!mountedRef.current) return;
           onCardUpdated(updated);
           setMessage("");
           setDecisionDrafts({});
         },
       });
     } catch (err) {
-      setError(errorText(err, "The interview round failed."));
+      if (mountedRef.current && !(err instanceof DOMException && err.name === "AbortError")) {
+        setError(errorText(err, "The interview round failed."));
+      }
     } finally {
-      setBusy(false);
-      setStreamStatus(null);
+      if (mountedRef.current) {
+        setBusy(false);
+        setStreamStatus(null);
+      }
     }
   };
 
   const runReview = useCallback(async () => {
     if (readOnly || !card.goldfishSatisfied || !card.userSatisfied) return;
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     setActiveTab("review");
     setError(null);
     setBusy(true);
@@ -312,23 +341,30 @@ export function CardStudioDrawer({
       await consumeCardStream({
         url: `/api/projects/${projectId}/cards/${card.id}/review/stream`,
         csrfToken,
+        signal: controller.signal,
         fallbackStatusLabel: "The automated review request failed",
         incompleteError: "The automated review stream ended before producing a report.",
         onProgress: (msg, step) => {
+          if (!mountedRef.current) return;
           setStreamStatus(msg);
           if (step) setReviewStep(step);
         },
         onComplete: (updated) => {
+          if (!mountedRef.current) return;
           onCardUpdated(updated);
           setActiveTab("review");
         },
       });
     } catch (err) {
-      setError(errorText(err, "The automated review failed."));
+      if (mountedRef.current && !(err instanceof DOMException && err.name === "AbortError")) {
+        setError(errorText(err, "The automated review failed."));
+      }
     } finally {
-      setBusy(false);
-      setStreamStatus(null);
-      setReviewStep(null);
+      if (mountedRef.current) {
+        setBusy(false);
+        setStreamStatus(null);
+        setReviewStep(null);
+      }
     }
   }, [readOnly, card.goldfishSatisfied, card.userSatisfied, projectId, card.id, csrfToken, onCardUpdated]);
 
@@ -560,7 +596,16 @@ export function CardStudioDrawer({
             </div>
             <h2 id="studio-title">{card.title}</h2>
           </div>
-          <button ref={closeRef} type="button" className="icon-btn" aria-label="Close studio" onClick={onClose}>
+          <button
+            ref={closeRef}
+            type="button"
+            className="icon-btn"
+            aria-label="Close studio"
+            disabled={busy}
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
             </svg>
